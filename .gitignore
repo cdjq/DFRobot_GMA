@@ -1,0 +1,44 @@
+# Editor and local workspace files
+.vscode/
+.idea/
+.agents/
+.codex/
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python cache and local environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Python package/build outputs
+build/
+dist/
+*.egg-info/
+
+# Arduino/local build outputs
+*.elf
+*.eep
+*.hex
+*.bin
+*.map
+*.lst
+*.o
+*.d
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
