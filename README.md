@@ -28,7 +28,10 @@ The library does not directly calculate gas curves on the host side. The onboard
 * Supports GMA2021B modules for CO and NO2 measurement
 * Supports GMA3021B modules for CO, NO2 and NH3 measurement
 * Communicates with the onboard controller through I2C addresses `0x75` to `0x78`
-* Starts and polls clean-air warm-up baseline calibration
+* Polls the firmware's automatic 3-minute warm-up and stability check
+* Repeats 1-minute warm-up periods until the sensor voltage is stable
+* Preserves an existing R0, or automatically saves the final stable window when R0 is absent
+* Clears an old R0 so the next clean-air warm-up can generate a replacement
 * Reads single-gas ppm data or all gas ppm registers at once
 * Reads hardware model, status bits, warm-up remaining time, command status, ADC voltage and baseline voltage
 * Supports sleep mode, wake-up mode and soft reset
@@ -65,9 +68,13 @@ The default address used by the library constructor and all examples is `GMA_ADD
 
 ## Methods
 
-Gas concentration data is valid only after clean-air baseline calibration is complete. Before calibration, during warm-up, during sleep mode or after an I2C read failure, ppm reads may return `GMA_VALUE_NOT_READY` (`-8888.0`). When a gas type is not supported by the current hardware, the library returns `GMA_NO_SUPPORT_GAS` (`-9999.0`). For example, GMA2021B does not support NH3, so `getGasData(eGasNH3)` returns `GMA_NO_SUPPORT_GAS`, and `getAllGasData(co, no2, nh3)` sets `nh3` to `GMA_NO_SUPPORT_GAS`.
+Firmware starts a 3-minute warm-up automatically at power-on. At the check point it uses the latest 30 one-second samples from each enabled channel, removes the two highest and two lowest values, and requires every retained sample to be within the current threshold (50mV by default) of the trimmed mean. An unstable window starts another 1-minute period and repeats the check until stable. `warmUpTime(3)` configures and polls this complete process; firmware V1.3 and later allow temporary threshold changes through `setWarmUpStableThresholdMv()`.
 
-Gas type is defined as a public enum inside `DFRobot_GMA`. Use `DFRobot_GMA::eGasCO`, `DFRobot_GMA::eGasNO2` or `DFRobot_GMA::eGasNH3`.
+After stability is confirmed, an existing R0 is preserved and used for concentration output. If no R0 exists, the firmware automatically saves the trimmed mean of the final stable 30-second window as the clean-air baseline. Therefore a sensor without R0 must be warmed up in verified clean air. `clearBaseline()` only removes the old R0; the following `warmUpTime()` creates the replacement after the sensor becomes stable. Stability alone cannot determine whether the surrounding air is clean.
+
+Gas concentration data is valid only after warm-up and baseline preparation are complete. Before calibration, during warm-up, during sleep mode or after an I2C read failure, ppm reads may return `GMA_VALUE_NOT_READY` (`-8888.0`). When a gas type is not supported by the current hardware, the library returns `GMA_NO_SUPPORT_GAS` (`-9999.0`). For example, GMA2021B does not support NH3, so `gma.getGasData(gma.eGasNH3)` returns `GMA_NO_SUPPORT_GAS`, and `getAllGasData(co, no2, nh3)` sets `nh3` to `GMA_NO_SUPPORT_GAS`.
+
+Gas type is defined as a public enum inside `DFRobot_GMA`. In sketches and examples, use `gma.eGasCO`, `gma.eGasNO2` or `gma.eGasNH3` for better Arduino IDE autocomplete.
 
 Hardware model values returned by `getHardwareModel()`:
 
@@ -114,14 +121,53 @@ uint8_t getHardwareModel(void);
 
 /**
  * @fn warmUpTime
- * @brief Start and poll clean-air zero-point warm-up calibration.
- * @param minute Warm-up calibration time in minutes. Values below 1 are treated as 1 minute.
- * @return Calibration state.
- * @retval true Warm-up calibration is complete.
+ * @brief Configure and poll the onboard warm-up/stability process.
+ * @param minute Initial warm-up time in minutes. Values below 1 are treated as 1 minute.
+ * @return Warm-up state.
+ * @retval true Warm-up and stability checking are complete. If R0 was absent, the final stable window has been used to create it.
  * @retval false Warm-up is still running or the command write failed.
- * @note This function does not block for the full warm-up time. Call it repeatedly in loop() or setup().
+ * @note Firmware starts a 3-minute warm-up automatically at power-on. If the host restarts while the sensor stays powered and reports COMPLETE, the first warmUpTime() call starts a new warm-up. A running firmware warm-up is adopted without resetting its countdown.
+ * @note Existing R0 is preserved; when R0 is absent, the final stable window is saved automatically.
+ * @warning When R0 is absent, run this process only in verified clean air.
  */
 bool warmUpTime(uint8_t minute = GMA_WARMUP_DEFAULT_MINUTE);
+
+/**
+ * @fn setWarmUpStableThresholdMv
+ * @brief Set the voltage-deviation threshold used by the warm-up stability check.
+ * @param value Threshold in mV, from 1 to 50. A firmware reset restores the 50mV default.
+ * @return Set result.
+ * @retval true The firmware accepted the value and readback matches it.
+ * @retval false The value is out of range, the command failed or readback did not match.
+ * @note If warm-up is already complete, the next warmUpTime() call starts a new warm-up so the new threshold is verified. A running warm-up continues and uses the new threshold at its next check.
+ */
+bool setWarmUpStableThresholdMv(uint8_t value);
+
+/**
+ * @fn getWarmUpStableThresholdMv
+ * @brief Read the voltage-deviation threshold used by the warm-up stability check.
+ * @return Threshold in mV, or 0 when the register read fails.
+ */
+uint8_t getWarmUpStableThresholdMv(void);
+
+/**
+ * @fn clearBaseline
+ * @brief Clear the saved R0 and enter the uncalibrated state.
+ * @return Clear result.
+ * @retval true The Flash record and active R0 were cleared.
+ * @retval false The I2C command or Flash erase failed.
+ * @note This function only clears R0. Call warmUpTime() in verified clean air afterward; because no baseline exists, its final stable window is saved automatically as the new R0.
+ */
+bool clearBaseline(void);
+
+/**
+ * @fn hasValidBaseline
+ * @brief Check whether a clean-air R0 baseline is available.
+ * @return Baseline state.
+ * @retval true A valid R0 exists and can be used for concentration conversion.
+ * @retval false The module is uncalibrated.
+ */
+bool hasValidBaseline(void);
 
 /**
  * @fn getGasData
@@ -144,18 +190,6 @@ float getGasData(eGasType_t gasType);
  * @retval false I2C communication failed. Outputs are set to GMA_VALUE_NOT_READY (-8888.0f).
  */
 bool getAllGasData(float &co, float &no2, float &nh3);
-
-/**
- * @fn getAllGasData
- * @brief Read CO and NO2 concentration registers at once.
- * @param co CO concentration output, unit ppm.
- * @param no2 NO2 concentration output, unit ppm.
- * @return Read result.
- * @retval true I2C read succeeded.
- * @retval false I2C communication failed. Outputs are set to GMA_VALUE_NOT_READY (-8888.0f).
- * @note Use this overload when NH3 is not needed or when using GMA2021B.
- */
-bool getAllGasData(float &co, float &no2);
 
 /**
  * @fn sleepMode
@@ -200,8 +234,9 @@ uint8_t getStatus(void);
 
 /**
  * @fn getWarmUpRemainSeconds
- * @brief Read the remaining warm-up time.
- * @return Remaining seconds. It is usually 0 when warm-up is not running.
+ * @brief Read the remaining seconds in the current warm-up phase.
+ * @return Remaining seconds in the current initial or retry phase.
+ * @note The firmware exposes 0 at an unstable-window boundary before starting the next 1-minute retry. A completed or idle warm-up also returns 0, so use warmUpTime() to decide whether the whole process is complete.
  */
 uint16_t getWarmUpRemainSeconds(void);
 
@@ -215,7 +250,7 @@ uint8_t getCommandStatus(void);
 /**
  * @fn getADCVoltageMv
  * @brief Read the current ADC voltage of the selected gas channel.
- * @param gasType eGasNO2 reads AIN0/ADC_NO2, eGasCO reads AIN1/ADC_CO.
+ * @param gasType eGasCO reads AIN0/ADC_CO, eGasNO2 reads AIN1/ADC_NO2, eGasNH3 reads AIN2/ADC_NH3 on GMA3021B.
  * @return Current voltage in mV. Unsupported gas types return 0.
  * @note Raw ADC voltage is mainly used for diagnostics. Gas concentration is calculated by the onboard MCU from the Rs/R0 ratio.
  */
@@ -224,9 +259,9 @@ uint16_t getADCVoltageMv(eGasType_t gasType);
 /**
  * @fn getBaselineVoltageMv
  * @brief Read the clean-air baseline voltage of the selected gas channel.
- * @param gasType eGasNO2 reads the AIN0 baseline, eGasCO reads the AIN1 baseline.
+ * @param gasType eGasCO reads the AIN0 baseline, eGasNO2 reads the AIN1 baseline, eGasNH3 reads the AIN2 baseline on GMA3021B.
  * @return Baseline voltage in mV. Unsupported gas types return 0.
- * @note Read this value after warm-up calibration is complete. The exposed baseline registers are AIN0 and AIN1.
+ * @note Read this value only after hasValidBaseline() returns true. When R0 was absent, a successful warm-up normally creates it, but a Flash failure can leave the baseline invalid.
  */
 uint16_t getBaselineVoltageMv(eGasType_t gasType);
 ```
@@ -236,7 +271,7 @@ Status bits returned by `getStatus()`:
 | Bit | Macro | Description |
 | --- | --- | --- |
 | `0x01` | `GMA_STATUS_BASELINE_VALID` | Clean-air baseline is valid |
-| `0x02` | `GMA_STATUS_WARMING` | Warm-up calibration is running |
+| `0x02` | `GMA_STATUS_WARMING` | Warm-up/stability checking is running; R0 is not being generated |
 | `0x04` | `GMA_STATUS_DATA_VALID` | Gas ppm data is valid |
 | `0x08` | `GMA_STATUS_SLEEP` | The onboard MCU is sleeping |
 | `0x10` | `GMA_STATUS_ADC_ERROR` | ADC sampling failed |
@@ -245,11 +280,12 @@ Status bits returned by `getStatus()`:
 
 ## Examples
 
-All examples keep the ADD_A1/ADD_A0 address switch table as code comments, print the detected hardware model with its meaning, then run clean-air baseline calibration. Keep the sensor in clean air until warm-up calibration is complete. After calibration, the examples print the CO and NO2 clean-air baseline voltages in mV.
+The normal measurement examples adopt the automatic power-on warm-up, print all raw channel voltages once per second and report 1-minute retries. If no R0 exists, the final stable window is saved automatically as the first clean-air baseline.
 
-* `getGasData`: Calibrate the module, then read CO, NO2 and NH3 ppm values one by one.
-* `getAllGasData`: Calibrate the module, then read gas ppm registers in one I2C transaction. Use `getAllGasData(co, no2)` when NH3 is not needed or unsupported.
-* `sleepWake`: Calibrate the module, then enter sleep mode, check power state, and wake up the module.
+* `getGasData`: Wait for stable data, then read CO, NO2 and NH3 ppm values one by one.
+* `getAllGasData`: Wait for stable data, then read CO, NO2 and NH3 in one I2C transaction. GMA2021B returns `GMA_NO_SUPPORT_GAS` for NH3.
+* `sleepWake`: Wait for stable data, then enter sleep mode, check power state, and wake up the module.
+* `calibrateBaseline`: Run only after confirming clean air. It clears an existing R0, then calls `warmUpTime()`; the firmware automatically saves the final stable window as the replacement R0.
 
 ## Compatibility
 
@@ -266,8 +302,8 @@ All examples keep the ADD_A1/ADD_A0 address switch table as code comments, print
 
 ## History
 
-* Date 2026-07-07
-* Version V1.0.0
+* Date 2026-07-23
+* Version V1.3.0
 
 ## Credits
 

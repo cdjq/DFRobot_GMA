@@ -4,8 +4,8 @@
  * @copyright   Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
  * @license     The MIT License (MIT)
  * @author      thdyyl(yuanlong.yu@dfrobot.com)
- * @version  V1.0.0
- * @date  2026-07-07
+ * @version  V1.3.0
+ * @date  2026-07-23
  * @url https://github.com/DFRobot/DFRobot_GMA
  */
 
@@ -21,6 +21,7 @@
  * Demo default: GMA_ADDRESS_3 (ADD_A1=1, ADD_A0=1, 0x78)
  */
 const uint8_t GMA_I2C_ADDRESS = GMA_ADDRESS_3;
+const uint8_t GMA_WARMUP_STABLE_THRESHOLD_MV = 10;
 DFRobot_GMA gma(&Wire, GMA_I2C_ADDRESS);
 bool gmaSupportNH3 = false;
 
@@ -58,12 +59,64 @@ uint8_t printHardwareModelInfo()
 void printBaselineVoltageInfo()
 {
   Serial.print("CO baseline voltage: ");
-  Serial.print(gma.getBaselineVoltageMv(DFRobot_GMA::eGasCO));
+  Serial.print(gma.getBaselineVoltageMv(gma.eGasCO));
   Serial.println(" mV");
 
   Serial.print("NO2 baseline voltage: ");
-  Serial.print(gma.getBaselineVoltageMv(DFRobot_GMA::eGasNO2));
+  Serial.print(gma.getBaselineVoltageMv(gma.eGasNO2));
   Serial.println(" mV");
+
+  if(gmaSupportNH3 == true){
+    Serial.print("NH3 baseline voltage: ");
+    Serial.print(gma.getBaselineVoltageMv(gma.eGasNH3));
+    Serial.println(" mV");
+  }
+}
+
+void printRawVoltageInfo()
+{
+  Serial.print("Raw voltage: CO=");
+  Serial.print(gma.getADCVoltageMv(gma.eGasCO));
+  Serial.print("mV, NO2=");
+  Serial.print(gma.getADCVoltageMv(gma.eGasNO2));
+  Serial.print("mV");
+
+  if(gmaSupportNH3 == true){
+    Serial.print(", NH3=");
+    Serial.print(gma.getADCVoltageMv(gma.eGasNH3));
+    Serial.print("mV");
+  }
+  Serial.println();
+}
+
+void waitForWarmUp()
+{
+  Serial.println("Warming up. Warm-up duration may be extended if the sensor has been unpowered for a long period.");
+  Serial.println("If the sensor has never been calibrated, place it in clean air for warm-up.");
+
+  bool isBaseline = gma.hasValidBaseline();
+  uint16_t lastS = 0xFFFF;
+  while(gma.warmUpTime(3) == false){
+    uint16_t remainS = gma.getWarmUpRemainSeconds();
+    if((lastS != 0xFFFF) && (remainS > lastS)){
+      Serial.println("Warm-up incomplete. Restart 1-minute warm-up.");
+    }
+    printRawVoltageInfo();
+    Serial.print("Warm-up remain: ");
+    Serial.print(remainS);
+    Serial.println(" s");
+    lastS = remainS;
+    delay(1000);
+  }
+
+  if(isBaseline == true){
+    Serial.println("Warm-up complete. Output gas data.");
+  }else if(gma.hasValidBaseline() == true){
+    Serial.println("Warm-up complete. The final stable voltage window has been saved as the clean-air baseline.");
+    Serial.println("Output gas data.");
+  }else{
+    Serial.println("Warm-up complete, but the clean-air baseline could not be saved.");
+  }
 }
 
 void printGasPpm(const char *gasName, float value)
@@ -92,30 +145,24 @@ void setup()
     delay(1000);
   }
 
+  if(gma.setWarmUpStableThresholdMv(GMA_WARMUP_STABLE_THRESHOLD_MV) == true){
+    Serial.print("Warm-up stable threshold: ");
+    Serial.print(gma.getWarmUpStableThresholdMv());
+    Serial.println(" mV");
+  }else{
+    Serial.println("Failed to set the warm-up stable threshold. Using the firmware default.");
+  }
+
   gmaSupportNH3 = (printHardwareModelInfo() == GMA_HW_GMA3021B);
 
-  Serial.println("Keep the sensor in clean air.");
-  while(gma.warmUpTime(3) == false){
-    Serial.print("Warm-up remain: ");
-    Serial.print(gma.getWarmUpRemainSeconds());
-    Serial.println(" s");
-    delay(1000);
-  }
-  Serial.println("Warm-up calibration done.");
+  waitForWarmUp();
   printBaselineVoltageInfo();
 }
 
 void loop()
 {
   float co, no2, nh3;
-  bool readResult;
-
-  if(gmaSupportNH3 == true){
-    readResult = gma.getAllGasData(co, no2, nh3);
-  }else{
-    readResult = gma.getAllGasData(co, no2);
-    nh3 = GMA_NO_SUPPORT_GAS;
-  }
+  bool readResult = gma.getAllGasData(co, no2, nh3);
 
   if(readResult == true){
     printGasPpm("CO", co);

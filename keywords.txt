@@ -8,6 +8,10 @@ eGasType_t	KEYWORD1
 begin	KEYWORD2
 getHardwareModel	KEYWORD2
 warmUpTime	KEYWORD2
+setWarmUpStableThresholdMv	KEYWORD2
+getWarmUpStableThresholdMv	KEYWORD2
+clearBaseline	KEYWORD2
+hasValidBaseline	KEYWORD2
 getGasData	KEYWORD2
 getAllGasData	KEYWORD2
 sleepMode	KEYWORD2

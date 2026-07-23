@@ -28,7 +28,10 @@ DFRobot_GMA 是 DFRobot Gravity MEMS 气体传感器模组的 Arduino 库，用�
 * 支持 GMA2021B 模块，可测量 CO 和 NO2
 * 支持 GMA3021B 模块，可测量 CO、NO2 和 NH3
 * 通过 `0x75` 到 `0x78` 的 I2C 地址与板载控制器通信
-* 支持启动并轮询洁净空气预热零点校准
+* 支持轮询固件上电自动执行的 3 分钟预热与稳定性检查
+* 电压不稳定时自动重复 1 分钟预热，直到稳定
+* 已有 R0 时保留原值；没有 R0 时自动保存最后稳定窗口
+* 支持清除旧 R0，使下一次洁净空气预热生成替代基线
 * 支持读取单个气体 ppm 数据，或一次性读取所有气体 ppm 寄存器
 * 支持读取硬件型号、状态位、预热剩余时间、命令状态、ADC 电压和基准电压
 * 支持休眠、唤醒和软复位
@@ -65,9 +68,13 @@ Raspberry Pi 使用方法请参考 `python/raspberrypi/README_CN.md`。
 
 ## 方法
 
-气体浓度数据只有在洁净空气零点校准完成后才有效。未校准、预热中、休眠中或 I2C 读取失败时，ppm 读取值可能返回 `GMA_VALUE_NOT_READY`（`-8888.0`）。当前硬件不支持某种气体时，库会返回 `GMA_NO_SUPPORT_GAS`（`-9999.0`）。例如 GMA2021B 不支持 NH3，调用 `getGasData(eGasNH3)` 会返回 `GMA_NO_SUPPORT_GAS`，调用 `getAllGasData(co, no2, nh3)` 时 `nh3` 会被赋值为 `GMA_NO_SUPPORT_GAS`。
+固件上电后自动开始 3 分钟预热。到达检查点后，各启用通道取最近 30 个一秒样本，去掉两个最高值和两个最低值，要求其余样本与修剪均值的偏差不超过当前阈值（默认 50mV）。窗口不稳定时自动再预热 1 分钟并复检，直到稳定。`warmUpTime(3)` 负责配置并轮询这一完整过程；固件 V1.3 及以上可通过 `setWarmUpStableThresholdMv()` 临时调整阈值。
 
-气体类型定义为 `DFRobot_GMA` 类内的公开枚举，调用时使用 `DFRobot_GMA::eGasCO`、`DFRobot_GMA::eGasNO2` 或 `DFRobot_GMA::eGasNH3`。
+确认稳定后，有 R0 就保留并使用已有 R0 输出浓度；没有 R0 时，固件自动把最后 30 秒稳定窗口的修剪均值保存为洁净空气基线。因此没有 R0 的传感器必须在确认的洁净空气中预热。`clearBaseline()` 本身只清除旧 R0，随后调用 `warmUpTime()`，稳定后就会自动生成替代基线。稳定性检查只能判断电压是否稳定，不能判断环境中是否没有目标气体。
+
+气体浓度数据只有在预热和基线准备完成后才有效。未校准、预热中、休眠中或 I2C 读取失败时，ppm 读取值可能返回 `GMA_VALUE_NOT_READY`（`-8888.0`）。当前硬件不支持某种气体时，库会返回 `GMA_NO_SUPPORT_GAS`（`-9999.0`）。例如 GMA2021B 不支持 NH3，调用 `gma.getGasData(gma.eGasNH3)` 会返回 `GMA_NO_SUPPORT_GAS`，调用 `getAllGasData(co, no2, nh3)` 时 `nh3` 会被赋值为 `GMA_NO_SUPPORT_GAS`。
+
+气体类型定义为 `DFRobot_GMA` 类内的公开枚举。在 sketch 和示例中，建议使用 `gma.eGasCO`、`gma.eGasNO2` 或 `gma.eGasNH3`，便于 Arduino IDE 自动补全。
 
 `getHardwareModel()` 返回的硬件型号含义如下：
 
@@ -114,14 +121,53 @@ uint8_t getHardwareModel(void);
 
 /**
  * @fn warmUpTime
- * @brief 启动并轮询洁净空气零点预热校准。
- * @param minute 预热校准时间，单位分钟；小于 1 的值按 1 分钟处理。
- * @return 校准状态。
- * @retval true 预热校准完成。
+ * @brief 配置并轮询板载预热与稳定性检查。
+ * @param minute 初始预热时间，单位分钟；小于 1 的值按 1 分钟处理。
+ * @return 预热状态。
+ * @retval true 预热和稳定性检查已完成；原来没有 R0 时，最后稳定窗口已用于生成 R0。
  * @retval false 正在预热，或命令写入失败。
- * @note 该函数不会阻塞整个预热时间，需要在 loop() 或 setup() 中反复调用。
+ * @note 固件上电自动开始 3 分钟预热。主控复位而传感器保持供电时，如果传感器仍报告 COMPLETE，首次调用 warmUpTime() 会重新启动预热；仍在进行的固件预热则继续原倒计时。
+ * @note 已有 R0 时保留原值，没有 R0 时自动保存最后稳定窗口。
+ * @warning 没有 R0 时，必须仅在确认的洁净空气中执行本流程。
  */
 bool warmUpTime(uint8_t minute = GMA_WARMUP_DEFAULT_MINUTE);
+
+/**
+ * @fn setWarmUpStableThresholdMv
+ * @brief 设置预热稳定性检查使用的电压最大偏差阈值。
+ * @param value 阈值，单位 mV，有效范围 1～50；固件复位后恢复默认 50mV。
+ * @return 设置结果。
+ * @retval true 固件已接受且回读值一致。
+ * @retval false 参数越界、命令失败或回读不一致。
+ * @note 若预热已经完成，下一次 warmUpTime() 会重新启动预热以验证新阈值；正在进行的预热不会重新计时，新阈值用于下一次检查。
+ */
+bool setWarmUpStableThresholdMv(uint8_t value);
+
+/**
+ * @fn getWarmUpStableThresholdMv
+ * @brief 读取预热稳定性检查使用的电压最大偏差阈值。
+ * @return 阈值，单位 mV；读取失败返回 0。
+ */
+uint8_t getWarmUpStableThresholdMv(void);
+
+/**
+ * @fn clearBaseline
+ * @brief 清除已保存的 R0，使模块进入未校准状态。
+ * @return 清除结果。
+ * @retval true Flash 记录和当前 R0 已清除。
+ * @retval false I2C 命令或 Flash 擦除失败。
+ * @note 本函数只清除 R0。清除后应在确认的洁净空气中调用 warmUpTime()；由于此时没有基线，其最后稳定窗口会自动保存为新 R0。
+ */
+bool clearBaseline(void);
+
+/**
+ * @fn hasValidBaseline
+ * @brief 检查是否存在有效的洁净空气 R0。
+ * @return 基线状态。
+ * @retval true 存在可用于浓度换算的有效 R0。
+ * @retval false 模块尚未校准。
+ */
+bool hasValidBaseline(void);
 
 /**
  * @fn getGasData
@@ -144,18 +190,6 @@ float getGasData(eGasType_t gasType);
  * @retval false I2C 通信失败，输出值会被置为 GMA_VALUE_NOT_READY（-8888.0f）。
  */
 bool getAllGasData(float &co, float &no2, float &nh3);
-
-/**
- * @fn getAllGasData
- * @brief 一次性读取 CO 和 NO2 浓度寄存器。
- * @param co CO 浓度输出，单位 ppm。
- * @param no2 NO2 浓度输出，单位 ppm。
- * @return 读取结果。
- * @retval true I2C 读取成功。
- * @retval false I2C 通信失败，输出值会被置为 GMA_VALUE_NOT_READY（-8888.0f）。
- * @note 不需要 NH3，或使用 GMA2021B 时，可调用该重载，不传入 nh3 参数。
- */
-bool getAllGasData(float &co, float &no2);
 
 /**
  * @fn sleepMode
@@ -200,8 +234,9 @@ uint8_t getStatus(void);
 
 /**
  * @fn getWarmUpRemainSeconds
- * @brief 读取预热剩余时间。
- * @return 剩余秒数。未预热时通常为 0。
+ * @brief 读取当前预热阶段的剩余秒数。
+ * @return 当前首次预热或重试阶段的剩余秒数。
+ * @note 稳定窗口检查失败时，固件会在下一轮 1 分钟重试前对外保留一次 0。预热完成或空闲时也返回 0，应使用 warmUpTime() 判断整个流程是否完成。
  */
 uint16_t getWarmUpRemainSeconds(void);
 
@@ -215,7 +250,7 @@ uint8_t getCommandStatus(void);
 /**
  * @fn getADCVoltageMv
  * @brief 读取指定气体通道的当前 ADC 电压。
- * @param gasType eGasNO2 读取 AIN0/ADC_NO2，eGasCO 读取 AIN1/ADC_CO。
+ * @param gasType eGasCO 读取 AIN0/ADC_CO，eGasNO2 读取 AIN1/ADC_NO2，eGasNH3 在 GMA3021B 上读取 AIN2/ADC_NH3。
  * @return 当前电压，单位 mV。不支持的气体类型返回 0。
  * @note 原始 ADC 电压主要用于诊断。气体浓度由板载 MCU 根据 Rs/R0 比例计算。
  */
@@ -224,9 +259,9 @@ uint16_t getADCVoltageMv(eGasType_t gasType);
 /**
  * @fn getBaselineVoltageMv
  * @brief 读取指定气体通道的洁净空气基准电压。
- * @param gasType eGasNO2 读取 AIN0 基准，eGasCO 读取 AIN1 基准。
+ * @param gasType eGasCO 读取 AIN0 基准，eGasNO2 读取 AIN1 基准，eGasNH3 在 GMA3021B 上读取 AIN2 基准。
  * @return 基准电压，单位 mV。不支持的气体类型返回 0。
- * @note 建议在预热校准完成后读取。当前公开的基准电压寄存器为 AIN0 和 AIN1。
+ * @note 仅应在 hasValidBaseline() 返回 true 后读取；原来没有 R0 时，成功预热通常会生成基线，但 Flash 失败仍可能导致基线无效。
  */
 uint16_t getBaselineVoltageMv(eGasType_t gasType);
 ```
@@ -236,7 +271,7 @@ uint16_t getBaselineVoltageMv(eGasType_t gasType);
 | 位 | 宏 | 说明 |
 | --- | --- | --- |
 | `0x01` | `GMA_STATUS_BASELINE_VALID` | 洁净空气零点有效 |
-| `0x02` | `GMA_STATUS_WARMING` | 正在预热校准 |
+| `0x02` | `GMA_STATUS_WARMING` | 正在预热/检查稳定性，此时不会生成 R0 |
 | `0x04` | `GMA_STATUS_DATA_VALID` | 气体 ppm 数据有效 |
 | `0x08` | `GMA_STATUS_SLEEP` | 板载 MCU 正在休眠 |
 | `0x10` | `GMA_STATUS_ADC_ERROR` | ADC 采样失败 |
@@ -245,11 +280,12 @@ uint16_t getBaselineVoltageMv(eGasType_t gasType);
 
 ## 示例
 
-所有示例都在代码注释中保留 ADD_A1/ADD_A0 拨码地址表，运行时会打印检测到的硬件型号及其含义，然后执行洁净空气零点校准。请将传感器保持在洁净空气中，等待预热校准完成后再进入示例主流程。校准完成后，示例会打印 CO 和 NO2 的洁净空气基准电压，单位 mV。
+普通测量示例会接管上电自动预热，每秒打印全部原始通道电压并报告 1 分钟重试。没有 R0 时，最后稳定窗口会自动保存为第一份洁净空气基线。
 
-* `getGasData`：校准模块后，分别读取 CO、NO2 和 NH3 ppm 浓度。
-* `getAllGasData`：校准模块后，通过一次 I2C 读取获取气体 ppm 寄存器。不需要 NH3 或当前硬件不支持 NH3 时，可使用 `getAllGasData(co, no2)`。
-* `sleepWake`：校准模块后，进入休眠模式，检查电源状态，然后唤醒模块。
+* `getGasData`：等待数据稳定后，分别读取 CO、NO2 和 NH3 ppm 浓度。
+* `getAllGasData`：等待数据稳定后，通过一次 I2C 读取获取 CO、NO2 和 NH3；GMA2021B 的 NH3 返回 `GMA_NO_SUPPORT_GAS`。
+* `sleepWake`：等待数据稳定后，进入休眠模式，检查电源状态，然后唤醒模块。
+* `calibrateBaseline`：仅在确认洁净空气后运行；先清除已有 R0，再调用 `warmUpTime()`，固件会自动把最后稳定窗口保存为替代 R0。
 
 ## 兼容性
 
@@ -266,8 +302,8 @@ uint16_t getBaselineVoltageMv(eGasType_t gasType);
 
 ## 历史
 
-* 日期 2026-07-07
-* 版本 V1.0.0
+* 日期 2026-07-23
+* 版本 V1.3.0
 
 ## 创作者
 
