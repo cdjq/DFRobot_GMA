@@ -1,10 +1,11 @@
 /*!
  * @file DFRobot_GMA.cpp
  * @brief I2C driver for DFRobot GMA gas sensor modules.
+ * @details Register access, warm-up polling and ppm reads for the onboard GMA controller.
  * @copyright   Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
- * @license     The MIT License (MIT)
- * @author      thdyyl(yuanlong.yu@dfrobot.com)
- * @version  V1.3.0
+ * @License     The MIT License (MIT)
+ * @author [thdyyl](yuanlong.yu@dfrobot.com)
+ * @version  V1.0.0
  * @date  2026-07-23
  * @url https://github.com/DFRobot/DFRobot_GMA
  */

@@ -1,10 +1,22 @@
 /*!
  * @file getAllGasData.ino
- * @brief Read all gas concentration data from the GMA sensor.
+ * @brief Example: warm up the GMA module, then read CO / NO2 / NH3 ppm in one register burst.
+ * @n Wiring (I2C, default Wire, address GMA_ADDRESS_3 / 0x78):
+ * @n VCC → 3.3V or 5V, per the module rating
+ * @n GND → GND
+ * @n SCL → SCL
+ * @n SDA → SDA
+ * @n Serial: 115200
+ * @details Same role as `getGasData` for daily ppm reading; no prior
+ *          `calibrateBaseline` is required. Difference: `loop()` uses
+ *          `getAllGasData(co, no2, nh3)` to fetch all registers in one burst.
+ * @n       On I2C failure it prints "Read failed.". GMA2021B reports NH3 as not supported.
+ *          `Warm-up remain: 0 s` alone is not finished; wait for "Warm-up complete...".
+ *          Parameter ranges are in `DFRobot_GMA.h`.
  * @copyright   Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
- * @license     The MIT License (MIT)
- * @author      thdyyl(yuanlong.yu@dfrobot.com)
- * @version  V1.3.0
+ * @License     The MIT License (MIT)
+ * @author [thdyyl](yuanlong.yu@dfrobot.com)
+ * @version  V1.0.0
  * @date  2026-07-23
  * @url https://github.com/DFRobot/DFRobot_GMA
  */
@@ -22,6 +34,7 @@
  */
 const uint8_t GMA_I2C_ADDRESS = GMA_ADDRESS_3;
 const uint8_t GMA_WARMUP_STABLE_THRESHOLD_MV = 10;
+/* Wiring: VCC, GND, SCL, SDA. Default address GMA_ADDRESS_3 (0x78). */
 DFRobot_GMA gma(&Wire, GMA_I2C_ADDRESS);
 bool gmaSupportNH3 = false;
 
@@ -89,11 +102,13 @@ void printRawVoltageInfo()
   Serial.println();
 }
 
+/*
+ * Poll warmUpTime(3) until true. Remain 0 s alone is not finished (retry boundary).
+ * Long unpowered time may extend warm-up. If no R0 exists yet, place the module in
+ * clean air so the final stable window can be saved as the first baseline.
+ */
 void waitForWarmUp()
 {
-  Serial.println("Warming up. Warm-up duration may be extended if the sensor has been unpowered for a long period.");
-  Serial.println("If the sensor has never been calibrated, place it in clean air for warm-up.");
-
   bool isBaseline = gma.hasValidBaseline();
   uint16_t lastS = 0xFFFF;
   while(gma.warmUpTime(3) == false){
@@ -113,7 +128,6 @@ void waitForWarmUp()
     Serial.println("Warm-up complete. Output gas data.");
   }else if(gma.hasValidBaseline() == true){
     Serial.println("Warm-up complete. The final stable voltage window has been saved as the clean-air baseline.");
-    Serial.println("Output gas data.");
   }else{
     Serial.println("Warm-up complete, but the clean-air baseline could not be saved.");
   }

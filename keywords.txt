@@ -2,8 +2,16 @@
 # Syntax Coloring Map For DFRobot_GMA
 #######################################
 
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
 DFRobot_GMA	KEYWORD1
 eGasType_t	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
 
 begin	KEYWORD2
 getHardwareModel	KEYWORD2
@@ -23,6 +31,10 @@ getWarmUpRemainSeconds	KEYWORD2
 getCommandStatus	KEYWORD2
 getADCVoltageMv	KEYWORD2
 getBaselineVoltageMv	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
 
 GMA_ADDRESS_0	LITERAL1
 GMA_ADDRESS_1	LITERAL1
@@ -44,3 +56,4 @@ GMA_STATUS_SLEEP	LITERAL1
 GMA_STATUS_ADC_ERROR	LITERAL1
 GMA_STATUS_FLASH_ERROR	LITERAL1
 GMA_STATUS_FORMULA_MISSING	LITERAL1
+GMA_WARMUP_DEFAULT_MINUTE	LITERAL1

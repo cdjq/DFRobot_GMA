@@ -1,10 +1,26 @@
 '''!
   @file calibrate_baseline.py
-  @brief Clear an old R0 when necessary, then let warm_up_time() create a new clean-air baseline.
-  @copyright Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
-  @license The MIT License (MIT)
-  @version V1.3.0
-  @date 2026-07-23
+  @brief Example: force a new clean-air R0 by clearing the old baseline, then running warm-up.
+  @n Wiring (I2C, bus=1, address ADDRESS_3 / 0x78):
+  @n VCC → 3.3V or 5V, per the module rating
+  @n GND → GND
+  @n SCL → SCL
+  @n SDA → SDA
+  @details When to use this demo:
+  @n     - Force a new clean-air R0 only (wrong old baseline, new environment, etc.).
+  @n     - Daily ppm reading does NOT need this first. Use get_gas_data / get_all_gas_data.
+  @n     Run only in verified clean air. Stability does not prove the air is clean.
+  @n     Flow: begin() -> optional threshold -> clear_baseline() if R0 exists ->
+  @n     poll warm_up_time(3) -> firmware saves new R0 -> print Saved R0 voltage.
+  @n     remain 0 s alone is not finished. Success prints calibration complete.
+  @n     If clear fails after a host-only reset, power-cycle the module and retry.
+  @n     Parameter ranges are in the method comments of DFRobot_GMA.py.
+  @copyright   Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
+  @license     The MIT License (MIT)
+  @author      [thdyyl](yuanlong.yu@dfrobot.com)
+  @version  V1.0.0
+  @date  2026-07-23
+  @url https://github.com/DFRobot/DFRobot_GMA
 '''
 
 import os
@@ -15,11 +31,21 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from DFRobot_GMA import DFRobot_GMA
 
 
+# I2C address switch table:
+# ADD_A1 ADD_A0 -> Address
+# 0      0      -> ADDRESS_0 (0x75)
+# 0      1      -> ADDRESS_1 (0x76)
+# 1      0      -> ADDRESS_2 (0x77)
+# 1      1      -> ADDRESS_3 (0x78)
+# Demo default: ADDRESS_3 (ADD_A1=1, ADD_A0=1, 0x78)
 I2C_ADDR = DFRobot_GMA.ADDRESS_3
+# Demo threshold 10 mV (valid 1-50). Firmware default after reset is 50 mV.
 WARM_UP_STABLE_THRESHOLD_MV = 10
 
 
 def configure_warm_up_threshold(gma):
+  # Optional. Failure is non-fatal; firmware keeps default 50 mV.
+  # If it keeps failing after a host-only reset, power-cycle the GMA module.
   if gma.set_warm_up_stable_threshold_mv(WARM_UP_STABLE_THRESHOLD_MV):
     print("Warm-up stable threshold: %d mV" %
           gma.get_warm_up_stable_threshold_mv())
@@ -54,7 +80,7 @@ def print_baseline_voltage_info(gma, supports_nh3):
 
 
 def wait_for_warm_up(gma, supports_nh3):
-  """Warm up, retry until stable, then automatically save R0 because no baseline exists."""
+  # Exit only when warm_up_time() returns True; remain 0 s is not completion.
   last_valid_s = None
   while gma.warm_up_time(3) is False:
     remain_s = gma.get_warm_up_remain_seconds()
@@ -76,10 +102,10 @@ def main():
 
   configure_warm_up_threshold(gma)
   supports_nh3 = gma.get_hardware_model() == DFRobot_GMA.HW_GMA3021B
-  print("Clean-air calibration requested.")
-  print("Remove all target gases and keep airflow, temperature and humidity stable.")
 
-  # Running this dedicated example is the user's explicit request to recalibrate.
+  # Force recalibration in verified clean air only.
+  # Clear existing R0 so the next warm-up must create a new one.
+  # If clear fails, power-cycle the module and run again. If no R0 yet, skip clear.
   if gma.has_valid_baseline():
     if gma.clear_baseline() is False:
       print("Failed to clear the old R0. Calibration stopped.")
@@ -88,6 +114,7 @@ def main():
 
   wait_for_warm_up(gma, supports_nh3)
 
+  # Success: has_valid_baseline() and Saved R0 voltages. Then use get_gas_data / get_all_gas_data.
   if gma.has_valid_baseline():
     print("Clean-air R0 calibration complete. The final stable window was saved automatically.")
     print_baseline_voltage_info(gma, supports_nh3)

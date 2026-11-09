@@ -1,10 +1,24 @@
 /*!
  * @file sleepWake.ino
- * @brief Control sleep and wake-up modes of the GMA sensor.
+ * @brief Example: stop and resume onboard MCU gas sampling with sleepMode / wakeUpMode.
+ * @n Wiring (I2C, default Wire, address GMA_ADDRESS_3 / 0x78):
+ * @n VCC → 3.3V or 5V, per the module rating
+ * @n GND → GND
+ * @n SCL → SCL
+ * @n SDA → SDA
+ * @n Serial: 115200
+ * @details Purpose: show that sleep stops MCU acquisition (ppm becomes not ready),
+ *          and wake-up resumes sampling. On SEN0757/SEN0758 the heater and LDO stay
+ *          powered, so overall module current does not drop much; this is not a
+ *          system-level low-power demo.
+ * @n       Flow: `begin()` → warm-up → in `loop()`:
+ *          print power state + CO ppm → `sleepMode()` → print again →
+ *          `wakeUpMode()` → short wait → print again.
+ *          Parameter ranges are in the method comments of `DFRobot_GMA.h`.
  * @copyright   Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
- * @license     The MIT License (MIT)
- * @author      thdyyl(yuanlong.yu@dfrobot.com)
- * @version  V1.3.0
+ * @License     The MIT License (MIT)
+ * @author [thdyyl](yuanlong.yu@dfrobot.com)
+ * @version  V1.0.0
  * @date  2026-07-23
  * @url https://github.com/DFRobot/DFRobot_GMA
  */
@@ -22,6 +36,7 @@
  */
 const uint8_t GMA_I2C_ADDRESS = GMA_ADDRESS_3;
 const uint8_t GMA_WARMUP_STABLE_THRESHOLD_MV = 10;
+/* Wiring: VCC, GND, SCL, SDA. Default address GMA_ADDRESS_3 (0x78). */
 DFRobot_GMA gma(&Wire, GMA_I2C_ADDRESS);
 
 /*
@@ -86,11 +101,12 @@ void printRawVoltageInfo()
   Serial.println();
 }
 
+/*
+ * Warm-up before the sleep/wake demo. Remain 0 s alone is not finished.
+ * If no R0 exists yet, warm up in clean air so a baseline can be created.
+ */
 void waitForWarmUp()
 {
-  Serial.println("Warming up. Warm-up duration may be extended if the sensor has been unpowered for a long period.");
-  Serial.println("If the sensor has never been calibrated, place it in clean air for warm-up.");
-
   bool isBaseline = gma.hasValidBaseline();
   uint16_t lastS = 0xFFFF;
   while(gma.warmUpTime(3) == false){
@@ -107,29 +123,49 @@ void waitForWarmUp()
   }
 
   if(isBaseline == true){
-    Serial.println("Warm-up complete. Output gas data.");
+    Serial.println("Warm-up complete.");
   }else if(gma.hasValidBaseline() == true){
     Serial.println("Warm-up complete. The final stable voltage window has been saved as the clean-air baseline.");
-    Serial.println("Output gas data.");
   }else{
     Serial.println("Warm-up complete, but the clean-air baseline could not be saved.");
   }
 }
 
-void printPowerState(const char *label)
+void printPowerState()
 {
   uint8_t powerState = gma.getPowerState();
 
-  Serial.print(label);
-  Serial.print(": ");
-
+  Serial.print("Power state: ");
   if(powerState == GMA_SLEEP_MODE){
-    Serial.println("sleep");
+    Serial.print("sleep");
   }else if(powerState == GMA_WAKE_UP_MODE){
-    Serial.println("wake-up");
+    Serial.print("wake-up");
   }else{
     Serial.print("read failed, raw=0x");
-    Serial.println(powerState, HEX);
+    Serial.print(powerState, HEX);
+  }
+}
+
+/*
+ * Print MCU sampling state and one CO sample.
+ * While sleeping, getGasData() is expected to report not ready.
+ */
+void printSamplingSnapshot(const char *phase)
+{
+  float co = gma.getGasData(gma.eGasCO);
+
+  Serial.print(phase);
+  Serial.print(" | ");
+  printPowerState();
+  Serial.print(" | CO: ");
+
+  if(co == GMA_NO_SUPPORT_GAS){
+    Serial.println("not supported");
+  }else if(co == GMA_VALUE_NOT_READY){
+    Serial.println("not ready");
+  }else{
+    Serial.print(co);
+    Serial.println(" ppm");
   }
 }
 
@@ -156,17 +192,21 @@ void setup()
 
   waitForWarmUp();
   printBaselineVoltageInfo();
+  /* Heater/LDO stay on in sleep; this demo shows sampling stop/resume, not current savings. */
 }
 
 void loop()
 {
-  gma.sleepMode();
-  printPowerState("Power state after sleep");
+  printSamplingSnapshot("Before sleep");
 
-  delay(5000);
+  gma.sleepMode();
+  printSamplingSnapshot("After sleep");
+  delay(3000);
 
   gma.wakeUpMode();
-  printPowerState("Power state after wake-up");
+  /* Give the MCU a short time to resume acquisition before reading ppm. */
+  delay(2000);
+  printSamplingSnapshot("After wake-up");
 
   delay(5000);
 }

@@ -1,10 +1,20 @@
 '''!
   @file get_all_gas_data.py
-  @brief Read all gas concentration data from the GMA sensor.
+  @brief Example: warm up the GMA module, then read CO / NO2 / NH3 ppm in one register burst.
+  @n Wiring (I2C, bus=1, address ADDRESS_3 / 0x78):
+  @n VCC → 3.3V or 5V, per the module rating
+  @n GND → GND
+  @n SCL → SCL
+  @n SDA → SDA
+  @details Same role as get_gas_data.py for daily ppm reading; no prior
+  @n     calibrate_baseline.py is required. Difference: get_all_gas_data() once per loop.
+  @n     GMA2021B reports NH3 as not supported.
+  @n     remain 0 s alone is not finished; wait for "Warm-up complete...".
+  @n     Parameter ranges are in the method comments of DFRobot_GMA.py.
   @copyright   Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
   @license     The MIT License (MIT)
-  @author      thdyyl(yuanlong.yu@dfrobot.com)
-  @version  V1.3.0
+  @author      [thdyyl](yuanlong.yu@dfrobot.com)
+  @version  V1.0.0
   @date  2026-07-23
   @url https://github.com/DFRobot/DFRobot_GMA
 '''
@@ -78,9 +88,8 @@ def print_raw_voltage_info(gma, supports_nh3):
 
 
 def wait_for_warm_up(gma, supports_nh3):
-  print("Warming up. Warm-up duration may be extended if the sensor has been unpowered for a long period.")
-  print("If the sensor has never been calibrated, place it in clean air for warm-up.")
-
+  # Poll until warm_up_time() is True. Remain 0 s alone is not finished.
+  # Long unpowered time may extend warm-up. If no R0 yet, use clean air.
   is_baseline = gma.has_valid_baseline()
   last_valid_s = None
   while gma.warm_up_time(3) is False:
@@ -101,7 +110,6 @@ def wait_for_warm_up(gma, supports_nh3):
     print("Warm-up complete. Output gas data.")
   else:
     print("Warm-up complete. The final stable voltage window has been saved as the clean-air baseline.")
-    print("Output gas data.")
   return baseline_valid
 
 

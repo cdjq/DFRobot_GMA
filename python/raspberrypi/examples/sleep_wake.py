@@ -1,10 +1,23 @@
 '''!
   @file sleep_wake.py
-  @brief Control sleep and wake-up modes of the GMA sensor.
+  @brief Example: stop and resume onboard MCU gas sampling with sleep_mode / wake_up_mode.
+  @n Wiring (I2C, bus=1, address ADDRESS_3 / 0x78):
+  @n VCC → 3.3V or 5V, per the module rating
+  @n GND → GND
+  @n SCL → SCL
+  @n SDA → SDA
+  @details Purpose: show that sleep stops MCU acquisition (ppm becomes not ready),
+  @n     and wake-up resumes sampling. On SEN0757/SEN0758 the heater and LDO stay
+  @n     powered, so overall module current does not drop much; this is not a
+  @n     system-level low-power demo.
+  @n     Flow: begin() -> warm-up -> loop:
+  @n     print power state + CO ppm -> sleep_mode() -> print again ->
+  @n     wake_up_mode() -> short wait -> print again.
+  @n     Parameter ranges are in the method comments of DFRobot_GMA.py.
   @copyright   Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
   @license     The MIT License (MIT)
-  @author      thdyyl(yuanlong.yu@dfrobot.com)
-  @version  V1.3.0
+  @author      [thdyyl](yuanlong.yu@dfrobot.com)
+  @version  V1.0.0
   @date  2026-07-23
   @url https://github.com/DFRobot/DFRobot_GMA
 '''
@@ -78,9 +91,7 @@ def print_raw_voltage_info(gma, supports_nh3):
 
 
 def wait_for_warm_up(gma, supports_nh3):
-  print("Warming up. Warm-up duration may be extended if the sensor has been unpowered for a long period.")
-  print("If the sensor has never been calibrated, place it in clean air for warm-up.")
-
+  # Warm-up before sleep/wake. Remain 0 s alone is not finished.
   is_baseline = gma.has_valid_baseline()
   last_valid_s = None
   while gma.warm_up_time(3) is False:
@@ -98,24 +109,34 @@ def wait_for_warm_up(gma, supports_nh3):
   if baseline_valid is False:
     print("Warm-up complete, but the clean-air baseline is not available.")
   elif is_baseline:
-    print("Warm-up complete. Output gas data.")
+    print("Warm-up complete.")
   else:
     print("Warm-up complete. The final stable voltage window has been saved as the clean-air baseline.")
-    print("Output gas data.")
   return baseline_valid
 
 
-def print_power_state(gma, label):
+def format_power_state(gma):
   power_state = gma.get_power_state()
-
   if power_state == DFRobot_GMA.SLEEP_MODE:
-    state_text = "sleep"
-  elif power_state == DFRobot_GMA.WAKE_UP_MODE:
-    state_text = "wake-up"
-  else:
-    state_text = "read failed, raw=0x%02X" % power_state
+    return "sleep"
+  if power_state == DFRobot_GMA.WAKE_UP_MODE:
+    return "wake-up"
+  return "read failed, raw=0x%02X" % power_state
 
-  print("%s: %s" % (label, state_text))
+
+def format_gas_ppm(value):
+  if value == DFRobot_GMA.NO_SUPPORT_GAS:
+    return "not supported"
+  if value == DFRobot_GMA.VALUE_NOT_READY:
+    return "not ready"
+  return "%.2f ppm" % value
+
+
+def print_sampling_snapshot(gma, phase):
+  # While sleeping, get_gas_data() is expected to report not ready.
+  co = gma.get_gas_data(DFRobot_GMA.GAS_CO)
+  print("%s | Power state: %s | CO: %s" %
+        (phase, format_power_state(gma), format_gas_ppm(co)))
 
 
 def main():
@@ -131,15 +152,19 @@ def main():
 
   if wait_for_warm_up(gma, supports_nh3):
     print_baseline_voltage_info(gma, supports_nh3)
+  # Heater/LDO stay on in sleep; this demo shows sampling stop/resume, not current savings.
 
   while True:
-    gma.sleep_mode()
-    print_power_state(gma, "Power state after sleep")
+    print_sampling_snapshot(gma, "Before sleep")
 
-    time.sleep(5)
+    gma.sleep_mode()
+    print_sampling_snapshot(gma, "After sleep")
+    time.sleep(3)
 
     gma.wake_up_mode()
-    print_power_state(gma, "Power state after wake-up")
+    # Give the MCU a short time to resume acquisition before reading ppm.
+    time.sleep(2)
+    print_sampling_snapshot(gma, "After wake-up")
 
     time.sleep(5)
 

@@ -1,10 +1,11 @@
 '''!
   @file DFRobot_GMA.py
   @brief Raspberry Pi driver for DFRobot GMA gas sensor modules.
+  @details The onboard MCU performs ADC sampling, clean-air calibration, ppm conversion and Flash storage.
   @copyright   Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
   @license     The MIT License (MIT)
-  @author      thdyyl(yuanlong.yu@dfrobot.com)
-  @version  V1.3.0
+  @author      [thdyyl](yuanlong.yu@dfrobot.com)
+  @version  V1.0.0
   @date  2026-07-23
   @url https://github.com/DFRobot/DFRobot_GMA
 '''
@@ -102,7 +103,8 @@ class DFRobot_GMA:
     '''!
       @brief Module init.
       @param bus int Raspberry Pi I2C bus number.
-      @param i2c_addr int Sensor I2C address, ADDRESS_0 ~ ADDRESS_3. Default is ADDRESS_3.
+      @param i2c_addr int Sensor I2C address.
+      @n i2c_addr is ADDRESS_0 ~ ADDRESS_3. Default is ADDRESS_3 (0x78). bus defaults to 1.
     '''
     self._bus = smbus.SMBus(bus)
     self._i2c_addr = i2c_addr
@@ -145,13 +147,14 @@ class DFRobot_GMA:
   def warm_up_time(self, minute=3):
     '''!
       @brief Configure and poll the automatic warm-up/stability process.
-      @param minute int Initial warm-up duration in minutes; values below 1 are treated as 1.
+      @param minute int Initial warm-up duration in minutes.
+      @n Values below 1 are treated as 1. Default is 3 minutes.
+      @n Firmware starts a 3-minute warm-up automatically at power-on. If the host restarts while the sensor stays powered and reports COMPLETE, the first warm_up_time() call starts a new warm-up. A running firmware warm-up is adopted without resetting its countdown.
+      @n Existing R0 is preserved; when R0 is absent, the final stable window is saved automatically.
+      @n When R0 is absent, use this method only in verified clean air. Stability does not prove that the air is clean.
       @return bool Warm-up state.
       @retval True Warm-up and stability checking are complete; if R0 was absent, the firmware has attempted to save the final stable window as R0.
       @retval False Warm-up is running or the I2C command failed.
-      @note Firmware starts a 3-minute warm-up automatically at power-on. If the host restarts while the sensor stays powered and reports COMPLETE, the first warm_up_time() call starts a new warm-up. A running firmware warm-up is adopted without resetting its countdown.
-      @note Existing R0 is preserved; when R0 is absent, the final stable window is saved automatically.
-      @warning When R0 is absent, use this method only in verified clean air because stability does not prove that the air is clean.
     '''
     if minute < 1:
       minute = 1
@@ -212,10 +215,10 @@ class DFRobot_GMA:
   def clear_baseline(self):
     '''!
       @brief Clear the saved R0 and enter the uncalibrated state.
+      @n This method only clears R0. Run warm_up_time() in verified clean air afterward; because no baseline exists, its final stable window will be saved automatically as the new R0.
       @return bool Clear result.
       @retval True The Flash record and active R0 were cleared.
       @retval False The I2C command or Flash erase failed.
-      @note This method only clears R0. Run warm_up_time() in verified clean air afterward; because no baseline exists, its final stable window will be saved automatically as the new R0.
     '''
     if self._write_command(self._CMD_CLEAR_BASELINE, 0) is False:
       return False
@@ -229,11 +232,12 @@ class DFRobot_GMA:
   def set_warm_up_stable_threshold_mv(self, value):
     '''!
       @brief Set the voltage-deviation threshold used by the warm-up stability check.
-      @param value int Threshold in mV, from 1 to 50. The setting is volatile and resets to 50 mV after a firmware reset.
+      @param value int Threshold in mV.
+      @n Valid range 1–50. The setting is volatile and resets to 50 mV after a firmware reset.
+      @n If warm-up is already complete, the next warm_up_time() call starts a new warm-up so the new threshold is verified. A running warm-up continues and uses the new threshold at its next check.
       @return bool Set result.
       @retval True The firmware accepted the value and readback matches it.
       @retval False The value is out of range, the command failed or readback did not match.
-      @note If warm-up is already complete, the next warm_up_time() call starts a new warm-up so the new threshold is verified. A running warm-up continues and uses the new threshold at its next check.
     '''
     if (value < self._WARMUP_STABLE_THRESHOLD_MIN_MV or
         value > self._WARMUP_STABLE_THRESHOLD_MAX_MV):
@@ -254,7 +258,8 @@ class DFRobot_GMA:
   def get_warm_up_stable_threshold_mv(self):
     '''!
       @brief Read the voltage-deviation threshold used by the warm-up stability check.
-      @return int Threshold in mV, or 0 when the register read fails.
+      @n Returns the threshold in mV, or 0 when the register read fails.
+      @return int Threshold in mV.
     '''
     return self._read_u8(self._REG_WARMUP_STABLE_THRESHOLD_MV, 0)
 
@@ -271,7 +276,10 @@ class DFRobot_GMA:
     '''!
       @brief Read gas concentration in ppm.
       @param gas_type int GAS_CO, GAS_NO2 or GAS_NH3.
-      @return float Gas concentration in ppm, NO_SUPPORT_GAS or VALUE_NOT_READY.
+      @n GMA2021B does not support GAS_NH3 and returns NO_SUPPORT_GAS.
+      @return float Gas concentration in ppm.
+      @retval NO_SUPPORT_GAS The current hardware does not support this gas.
+      @retval VALUE_NOT_READY Data is not ready, or the module is uncalibrated, warming up or sleeping.
     '''
     if gas_type == self.GAS_CO:
       return self._read_float(self._REG_CO_PPM, self.VALUE_NOT_READY)
@@ -288,7 +296,9 @@ class DFRobot_GMA:
   def get_all_gas_data(self):
     '''!
       @brief Read all gas concentration registers.
-      @return tuple (co, no2, nh3), unit ppm. GMA2021B returns NO_SUPPORT_GAS for nh3.
+      @return tuple (co, no2, nh3), unit ppm.
+      @n GMA2021B returns NO_SUPPORT_GAS for nh3.
+      @n An I2C failure returns VALUE_NOT_READY for all three values.
     '''
     data = self._read_reg(self._REG_CO_PPM, 12)
     if data is None:
@@ -308,8 +318,10 @@ class DFRobot_GMA:
 
   def sleep_mode(self):
     '''!
-      @brief Let the onboard MCU enter sleep mode.
-      @note This function waits briefly for the power-state register to update.
+      @brief Stop onboard MCU gas sampling (sleep).
+      @n On SEN0757/SEN0758 the heater and LDO stay powered, so overall module current
+      @n does not drop much. Sleep only pauses MCU acquisition, not a system low-power cut.
+      @n This function waits briefly for the power-state register to update.
     '''
     if self._write_command(self._CMD_SLEEP, 0) is True:
       self._warm_up_active = False
@@ -318,8 +330,9 @@ class DFRobot_GMA:
 
   def wake_up_mode(self):
     '''!
-      @brief Wake up the onboard MCU and resume gas sampling.
-      @note This function waits briefly for the power-state register to update.
+      @brief Resume onboard MCU gas sampling after sleep.
+      @n Heater/LDO were already on; this restarts acquisition on the MCU.
+      @n This function waits briefly for the power-state register to update.
     '''
     if self._write_command(self._CMD_WAKEUP, 0) is True:
       self._warm_up_active = False
@@ -328,9 +341,9 @@ class DFRobot_GMA:
 
   def get_power_state(self):
     '''!
-      @brief Read current power state.
-      @return int SLEEP_MODE, WAKE_UP_MODE or 0xFF when read failed.
-      @note This reads the latest power-state register snapshot from the module.
+      @brief Read whether the onboard MCU is sampling or stopped.
+      @n This reads the latest power-state register snapshot from the module.
+      @return int SLEEP_MODE (sampling stopped), WAKE_UP_MODE (sampling), or 0xFF on read failure.
     '''
     return self._read_u8(self._REG_POWER_STATE, 0xFF)
 
@@ -356,8 +369,9 @@ class DFRobot_GMA:
   def get_warm_up_remain_seconds(self):
     '''!
       @brief Read the remaining seconds in the current warm-up phase.
-      @return int Remaining seconds in the initial or retry phase.
-      @note The firmware reports 0 at an unstable-window boundary before a 1-minute retry. Complete and idle states also return 0; use warm_up_time() to distinguish completion.
+      @n Returns the remaining seconds in the initial or retry phase.
+      @n The firmware reports 0 at an unstable-window boundary before a 1-minute retry. Complete and idle states also return 0; use warm_up_time() to distinguish completion.
+      @return int Remaining seconds.
     '''
     return self._read_u16(self._REG_WARMUP_REMAIN_L, 0)
 
@@ -370,14 +384,17 @@ class DFRobot_GMA:
   def get_command_status(self):
     '''!
       @brief Read recent command status.
-      @return int 0 idle, 1 busy, 2 done, 0x80 error.
+      @n 0 idle, 1 busy, 2 done, 0x80 error.
+      @return int Command status.
     '''
     return self._read_u8(self._REG_COMMAND_STATUS, self._CMD_STATUS_ERROR)
 
   def get_adc_voltage_mv(self, gas_type):
     '''!
       @brief Read current ADC voltage.
-      @param gas_type int GAS_CO reads AIN0, GAS_NO2 reads AIN1, GAS_NH3 reads AIN2 on GMA3021B.
+      @param gas_type int Gas channel.
+      @n GAS_CO reads AIN0, GAS_NO2 reads AIN1, GAS_NH3 reads AIN2 on GMA3021B.
+      @n Unsupported gas types return 0.
       @return int ADC voltage in mV.
     '''
     if gas_type == self.GAS_CO:
@@ -394,9 +411,11 @@ class DFRobot_GMA:
   def get_baseline_voltage_mv(self, gas_type):
     '''!
       @brief Read clean-air baseline voltage.
-      @param gas_type int GAS_CO reads AIN0 baseline, GAS_NO2 reads AIN1 baseline, GAS_NH3 reads AIN2 baseline on GMA3021B.
+      @param gas_type int Gas channel.
+      @n GAS_CO reads AIN0 baseline, GAS_NO2 reads AIN1 baseline, GAS_NH3 reads AIN2 baseline on GMA3021B.
+      @n Unsupported gas types return 0.
+      @n Read this value only after has_valid_baseline() returns True. When R0 was absent, a successful warm-up normally creates it, but a Flash failure can leave it invalid.
       @return int Baseline voltage in mV.
-      @note Read this value only after has_valid_baseline() returns True. When R0 was absent, a successful warm-up normally creates it, but a Flash failure can leave it invalid.
     '''
     if gas_type == self.GAS_CO:
       return self._read_u16(self._REG_BASE_AIN0_MV_L, 0)
