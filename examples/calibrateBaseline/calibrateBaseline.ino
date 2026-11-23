@@ -28,7 +28,7 @@
  * @License     The MIT License (MIT)
  * @author [thdyyl](yuanlong.yu@dfrobot.com)
  * @version  V1.0.0
- * @date  2026-07-23
+ * @date  2026-11-23
  * @url https://github.com/DFRobot/DFRobot_GMA
  */
 
@@ -48,7 +48,7 @@ const uint8_t GMA_I2C_ADDRESS = GMA_ADDRESS_3;
 const uint8_t GMA_WARMUP_STABLE_THRESHOLD_MV = 10;
 /* Wiring: VCC, GND, SCL, SDA. Default address GMA_ADDRESS_3 (0x78). */
 DFRobot_GMA gma(&Wire, GMA_I2C_ADDRESS);
-bool supportsNH3 = false;
+bool        supportsNH3 = false;
 
 void printRawVoltageInfo()
 {
@@ -57,7 +57,7 @@ void printRawVoltageInfo()
   Serial.print("mV, NO2=");
   Serial.print(gma.getADCVoltageMv(gma.eGasNO2));
   Serial.print("mV");
-  if(supportsNH3 == true){
+  if (supportsNH3 == true) {
     Serial.print(", NH3=");
     Serial.print(gma.getADCVoltageMv(gma.eGasNH3));
     Serial.print("mV");
@@ -72,7 +72,7 @@ void printBaselineVoltageInfo()
   Serial.print("mV, NO2=");
   Serial.print(gma.getBaselineVoltageMv(gma.eGasNO2));
   Serial.print("mV");
-  if(supportsNH3 == true){
+  if (supportsNH3 == true) {
     Serial.print(", NH3=");
     Serial.print(gma.getBaselineVoltageMv(gma.eGasNH3));
     Serial.print("mV");
@@ -90,9 +90,9 @@ void waitForWarmUp()
 {
   uint16_t lastS = 0xFFFF;
 
-  while(gma.warmUpTime(3) == false){
+  while (gma.warmUpTime(3) == false) {
     uint16_t remainS = gma.getWarmUpRemainSeconds();
-    if((lastS != 0xFFFF) && (remainS > lastS)){
+    if ((lastS != 0xFFFF) && (remainS > lastS)) {
       Serial.println("Warm-up incomplete. Restart 1-minute warm-up.");
     }
     printRawVoltageInfo();
@@ -107,20 +107,20 @@ void waitForWarmUp()
 void setup()
 {
   Serial.begin(115200);
-  while(!Serial){
+  while (!Serial) {
   }
 
-  while(gma.begin() == false){
+  while (gma.begin() == false) {
     Serial.println("GMA sensor not found. Check the I2C address switches.");
     delay(1000);
   }
 
   /* Optional demo threshold. Failure is non-fatal (firmware keeps default 50 mV). */
-  if(gma.setWarmUpStableThresholdMv(GMA_WARMUP_STABLE_THRESHOLD_MV) == true){
+  if (gma.setWarmUpStableThresholdMv(GMA_WARMUP_STABLE_THRESHOLD_MV) == true) {
     Serial.print("Warm-up stable threshold: ");
     Serial.print(gma.getWarmUpStableThresholdMv());
     Serial.println(" mV");
-  }else{
+  } else {
     Serial.println("Failed to set the warm-up stable threshold. Using the firmware default.");
   }
 
@@ -133,8 +133,8 @@ void setup()
    * power-cycle the GMA module and run this sketch again.
    * If no R0 exists yet, skip clear and let warm-up create the first baseline.
    */
-  if(gma.hasValidBaseline() == true){
-    if(gma.clearBaseline() == false){
+  if (gma.hasValidBaseline() == true) {
+    if (gma.clearBaseline() == false) {
       Serial.println("Failed to clear the old R0. Calibration stopped.");
       return;
     }
@@ -144,10 +144,10 @@ void setup()
   waitForWarmUp();
 
   /* Success: hasValidBaseline() true and Saved R0 voltages printed. Then use getGasData / getAllGasData for ppm. */
-  if(gma.hasValidBaseline() == true){
+  if (gma.hasValidBaseline() == true) {
     Serial.println("Clean-air R0 calibration complete. The final stable window was saved automatically.");
     printBaselineVoltageInfo();
-  }else{
+  } else {
     Serial.println("Warm-up completed, but the clean-air R0 could not be saved.");
   }
 }

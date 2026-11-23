@@ -6,7 +6,7 @@
  * @License     The MIT License (MIT)
  * @author [thdyyl](yuanlong.yu@dfrobot.com)
  * @version  V1.0.0
- * @date  2026-07-23
+ * @date  2026-11-23
  * @url https://github.com/DFRobot/DFRobot_GMA
  */
 
@@ -16,44 +16,43 @@
 #include "Arduino.h"
 #include "Wire.h"
 
-#define GMA_ADDRESS_0                 ((uint8_t)0x75) ///< ADD_A1=0, ADD_A0=0.
-#define GMA_ADDRESS_1                 ((uint8_t)0x76) ///< ADD_A1=0, ADD_A0=1.
-#define GMA_ADDRESS_2                 ((uint8_t)0x77) ///< ADD_A1=1, ADD_A0=0.
-#define GMA_ADDRESS_3                 ((uint8_t)0x78) ///< ADD_A1=1, ADD_A0=1.
+#define GMA_ADDRESS_0 ((uint8_t)0x75)    ///< ADD_A1=0, ADD_A0=0.
+#define GMA_ADDRESS_1 ((uint8_t)0x76)    ///< ADD_A1=0, ADD_A0=1.
+#define GMA_ADDRESS_2 ((uint8_t)0x77)    ///< ADD_A1=1, ADD_A0=0.
+#define GMA_ADDRESS_3 ((uint8_t)0x78)    ///< ADD_A1=1, ADD_A0=1.
 
-#define GMA_HW_GMA2021B               ((uint8_t)0x21) ///< Hardware model returned by getHardwareModel(): GMA2021B, supports CO and NO2.
-#define GMA_HW_GMA3021B               ((uint8_t)0x31) ///< Hardware model returned by getHardwareModel(): GMA3021B, supports CO, NO2 and NH3.
+#define GMA_HW_GMA2021B ((uint8_t)0x21)    ///< Hardware model returned by getHardwareModel(): GMA2021B, supports CO and NO2.
+#define GMA_HW_GMA3021B ((uint8_t)0x31)    ///< Hardware model returned by getHardwareModel(): GMA3021B, supports CO, NO2 and NH3.
 
-#define GMA_SLEEP_MODE                ((uint8_t)0x00) ///< Onboard MCU stopped gas sampling (heater/LDO still powered).
-#define GMA_WAKE_UP_MODE              ((uint8_t)0x01) ///< Onboard MCU is sampling normally.
+#define GMA_SLEEP_MODE   ((uint8_t)0x00)    ///< Onboard MCU stopped gas sampling (heater/LDO still powered).
+#define GMA_WAKE_UP_MODE ((uint8_t)0x01)    ///< Onboard MCU is sampling normally.
 
-#define GMA_NO_SUPPORT_GAS            (-9999.0f)      ///< The current hardware does not support this gas.
-#define GMA_VALUE_NOT_READY           (-8888.0f)      ///< The gas data is not ready.
+#define GMA_NO_SUPPORT_GAS  (-9999.0f)    ///< The current hardware does not support this gas.
+#define GMA_VALUE_NOT_READY (-8888.0f)    ///< The gas data is not ready.
 
-#define GMA_STATUS_BASELINE_VALID     ((uint8_t)0x01) ///< Clean-air baseline is valid.
-#define GMA_STATUS_WARMING            ((uint8_t)0x02) ///< Warm-up/stability checking is running; this does not imply R0 calibration.
-#define GMA_STATUS_DATA_VALID         ((uint8_t)0x04) ///< Gas ppm data is valid.
-#define GMA_STATUS_SLEEP              ((uint8_t)0x08) ///< Onboard MCU sampling is stopped (sleep).
-#define GMA_STATUS_ADC_ERROR          ((uint8_t)0x10) ///< ADC sampling failed.
-#define GMA_STATUS_FLASH_ERROR        ((uint8_t)0x20) ///< Flash storage failed.
-#define GMA_STATUS_FORMULA_MISSING    ((uint8_t)0x40) ///< Gas formula is not configured in firmware.
-#define GMA_WARMUP_DEFAULT_MINUTE     ((uint8_t)3)    ///< Recommended default warm-up time.
+#define GMA_STATUS_BASELINE_VALID  ((uint8_t)0x01)    ///< Clean-air baseline is valid.
+#define GMA_STATUS_WARMING         ((uint8_t)0x02)    ///< Warm-up/stability checking is running; this does not imply R0 calibration.
+#define GMA_STATUS_DATA_VALID      ((uint8_t)0x04)    ///< Gas ppm data is valid.
+#define GMA_STATUS_SLEEP           ((uint8_t)0x08)    ///< Onboard MCU sampling is stopped (sleep).
+#define GMA_STATUS_ADC_ERROR       ((uint8_t)0x10)    ///< ADC sampling failed.
+#define GMA_STATUS_FLASH_ERROR     ((uint8_t)0x20)    ///< Flash storage failed.
+#define GMA_STATUS_FORMULA_MISSING ((uint8_t)0x40)    ///< Gas formula is not configured in firmware.
+#define GMA_WARMUP_DEFAULT_MINUTE  ((uint8_t)3)       ///< Recommended default warm-up time.
 
 /**
  * @class DFRobot_GMA
  * @brief Driver for the Gravity MEMS gas sensor module over I2C.
  */
-class DFRobot_GMA
-{
+class DFRobot_GMA {
 public:
   /**
    * @enum eGasType_t
    * @brief Gas channel used by the concentration and voltage readers.
    */
   typedef enum {
-    eGasCO = 0x01,  ///< CO gas type.
-    eGasNO2 = 0x02, ///< NO2 gas type.
-    eGasNH3 = 0x03  ///< NH3 gas type.
+    eGasCO  = 0x01,    ///< CO gas type.
+    eGasNO2 = 0x02,    ///< NO2 gas type.
+    eGasNH3 = 0x03     ///< NH3 gas type.
   } eGasType_t;
 
   /**
@@ -69,6 +68,11 @@ public:
   /**
    * @fn begin
    * @brief Initialize I2C communication and read the device ID and hardware model.
+   * @n Call it once in setup() before any other method; it starts the I2C bus itself,
+   * @n so the sketch does not need a separate Wire.begin(). The module must be powered
+   * @n and the ADD_A1 / ADD_A0 switches must match i2cAddr.
+   * @n Returns false when the device ID is not 0xA5 or the hardware model is neither
+   * @n GMA_HW_GMA2021B nor GMA_HW_GMA3021B.
    * @return Initialization result.
    * @retval true The GMA device is detected.
    * @retval false No device is detected or I2C communication failed.
@@ -132,6 +136,9 @@ public:
   /**
    * @fn hasValidBaseline
    * @brief Check whether a clean-air R0 baseline is available.
+   * @n Reads the status register on every call, so it costs one I2C transaction.
+   * @n A register read failure is reported as false; treat that as uncalibrated and do
+   * @n not use getBaselineVoltageMv() until a later call returns true.
    * @return Baseline state.
    * @retval true A valid baseline exists and can be used for concentration conversion.
    * @retval false The module is uncalibrated.
@@ -194,6 +201,9 @@ public:
   /**
    * @fn softReset
    * @brief Reset the onboard MCU without clearing user calibration data.
+   * @n The saved R0 is kept, but the onboard warm-up starts again from the beginning,
+   * @n so call warmUpTime() and wait for true before reading ppm. The function waits
+   * @n 80 ms after the command for the MCU to restart.
    * @return Command write result.
    * @retval true Command write succeeded.
    * @retval false I2C communication failed.
@@ -203,7 +213,11 @@ public:
   /**
    * @fn getStatus
    * @brief Read onboard MCU status bits.
-   * @return Bit mask of GMA_STATUS_xxx values.
+   * @n Bits are GMA_STATUS_BASELINE_VALID, GMA_STATUS_WARMING, GMA_STATUS_DATA_VALID,
+   * @n GMA_STATUS_SLEEP, GMA_STATUS_ADC_ERROR, GMA_STATUS_FLASH_ERROR and GMA_STATUS_FORMULA_MISSING.
+   * @n A register read failure also returns 0, the same value as "no flag set"; use
+   * @n getPowerState() (0xFF on failure) to tell a dead bus apart.
+   * @return Bit mask of GMA_STATUS_xxx values, or 0 when the read fails.
    */
   uint8_t getStatus(void);
 
@@ -212,7 +226,8 @@ public:
    * @brief Read the remaining seconds in the current warm-up phase.
    * @n Returns the remaining seconds in the current initial or retry phase.
    * @n The firmware exposes 0 at an unstable-window boundary before starting the next 1-minute retry. A completed or idle warm-up also returns 0, so use warmUpTime() to decide whether the whole process is complete.
-   * @return Remaining seconds.
+   * @n A register read failure also returns 0.
+   * @return Remaining seconds, or 0 when warm-up is idle, complete or the read fails.
    */
   uint16_t getWarmUpRemainSeconds(void);
 
@@ -220,7 +235,8 @@ public:
    * @fn getCommandStatus
    * @brief Read the execution status of the latest command.
    * @n 0 idle, 1 busy, 2 done, 0x80 error.
-   * @return Command status.
+   * @n A register read failure returns 0x80, the same value as a failed command.
+   * @return Command status, or 0x80 when the read fails.
    */
   uint8_t getCommandStatus(void);
 
@@ -230,7 +246,8 @@ public:
    * @param gasType Gas channel.
    * @n eGasCO reads AIN0/ADC_CO, eGasNO2 reads AIN1/ADC_NO2, eGasNH3 reads AIN2/ADC_NH3 on GMA3021B.
    * @n Unsupported gas types return 0.
-   * @return Current voltage in mV.
+   * @n A register read failure also returns 0.
+   * @return Current voltage in mV, or 0 when the gas type is unsupported or the read fails.
    */
   uint16_t getADCVoltageMv(eGasType_t gasType);
 
@@ -240,40 +257,42 @@ public:
    * @param gasType Gas channel.
    * @n eGasCO reads the AIN0 baseline, eGasNO2 reads the AIN1 baseline, eGasNH3 reads the AIN2 baseline on GMA3021B.
    * @n Unsupported gas types return 0.
+   * @n A register read failure also returns 0.
    * @n Read this value only after hasValidBaseline() returns true. When R0 was absent, a successful warm-up normally creates it, but a Flash failure can leave the baseline invalid.
-   * @return Baseline voltage in mV.
+   * @return Baseline voltage in mV, or 0 when the gas type is unsupported, R0 is absent or the read fails.
    */
   uint16_t getBaselineVoltageMv(eGasType_t gasType);
 
-private:
+protected:
   /**
    * @union uFloatData_t
    * @brief Four-byte view of one little-endian float register.
    */
   typedef union {
     uint32_t value;
-    uint8_t bytes[4];
-    float floatValue;
+    uint8_t  bytes[4];
+    float    floatValue;
   } uFloatData_t;
 
-  bool readReg(uint8_t reg, uint8_t *pBuf, uint8_t len);
-  bool writeReg(uint8_t reg, const uint8_t *pBuf, uint8_t len);
-  bool writeCommand(uint8_t command, uint8_t param);
-  bool waitCommandDone(uint16_t timeoutMs);
-  uint8_t getWarmUpMinute(void);
-  uint8_t getWarmUpState(void);
-  uint8_t readUInt8(uint8_t reg, uint8_t defaultValue);
+  bool     readReg(uint8_t reg, uint8_t *pBuf, uint8_t len);
+  bool     writeReg(uint8_t reg, const uint8_t *pBuf, uint8_t len);
+  bool     writeCommand(uint8_t command, uint8_t param);
+  bool     waitCommandDone(uint16_t timeoutMs);
+  uint8_t  getWarmUpMinute(void);
+  uint8_t  getWarmUpState(void);
+  uint8_t  readUInt8(uint8_t reg, uint8_t defaultValue);
   uint16_t readUInt16(uint8_t reg, uint16_t defaultValue);
-  float readFloat(uint8_t reg, float defaultValue);
-  float bytesToFloat(const uint8_t *pBuf);
+  float    readFloat(uint8_t reg, float defaultValue);
+  float    bytesToFloat(const uint8_t *pBuf);
 
+private:
   TwoWire *_pWire;
-  uint8_t _i2cAddr;
-  uint8_t _hwModel;
-  uint8_t _warmUpMinute;
-  bool _warmUpActive;
-  bool _warmUpDone;
-  bool _warmUpRestartPending;
+  uint8_t  _i2cAddr;
+  uint8_t  _hwModel;
+  uint8_t  _warmUpMinute;
+  bool     _warmUpActive;
+  bool     _warmUpDone;
+  bool     _warmUpRestartPending;
 };
 
 #endif

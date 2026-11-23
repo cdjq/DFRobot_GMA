@@ -11,12 +11,13 @@ This Gravity MEMS gas sensor module (SKU: SEN0757 / SEN0758) runs gas sampling a
 | 1 | 0 | `0x77` |
 | 1 | 1 | `0x78` |
 
-## Product Link (https://www.dfrobot.com)
+## Product Link ([https://www.dfrobot.com](https://www.dfrobot.com))
 
 SKU: SEN0757 / SEN0758
 
 ## Table of Contents
 
+* [Product Link](#product-link-httpswwwdfrobotcom)
 * [Summary](#summary)
 * [Installation](#installation)
 * [Methods](#methods)
@@ -78,6 +79,11 @@ DFRobot_GMA(TwoWire *pWire = &Wire, uint8_t i2cAddr = GMA_ADDRESS_3);
 /**
  * @fn begin
  * @brief Initialize I2C communication and read the device ID and hardware model.
+ * @n Call it once in setup() before any other method; it starts the I2C bus itself,
+ * @n so the sketch does not need a separate Wire.begin(). The module must be powered
+ * @n and the ADD_A1 / ADD_A0 switches must match i2cAddr.
+ * @n Returns false when the device ID is not 0xA5 or the hardware model is neither
+ * @n GMA_HW_GMA2021B nor GMA_HW_GMA3021B.
  * @return Initialization result.
  * @retval true The GMA device is detected.
  * @retval false No device is detected or I2C communication failed.
@@ -141,8 +147,11 @@ bool clearBaseline(void);
 /**
  * @fn hasValidBaseline
  * @brief Check whether a clean-air R0 baseline is available.
+ * @n Reads the status register on every call, so it costs one I2C transaction.
+ * @n A register read failure is reported as false; treat that as uncalibrated and do
+ * @n not use getBaselineVoltageMv() until a later call returns true.
  * @return Baseline state.
- * @retval true A valid R0 exists and can be used for concentration conversion.
+ * @retval true A valid baseline exists and can be used for concentration conversion.
  * @retval false The module is uncalibrated.
  */
 bool hasValidBaseline(void);
@@ -202,6 +211,9 @@ uint8_t getPowerState(void);
 /**
  * @fn softReset
  * @brief Reset the onboard MCU without clearing user calibration data.
+ * @n The saved R0 is kept, but the onboard warm-up starts again from the beginning,
+ * @n so call warmUpTime() and wait for true before reading ppm. The function waits
+ * @n 80 ms after the command for the MCU to restart.
  * @return Command write result.
  * @retval true Command write succeeded.
  * @retval false I2C communication failed.
@@ -211,7 +223,11 @@ bool softReset(void);
 /**
  * @fn getStatus
  * @brief Read onboard MCU status bits.
- * @return Bit mask of GMA_STATUS_xxx values.
+ * @n Bits are GMA_STATUS_BASELINE_VALID, GMA_STATUS_WARMING, GMA_STATUS_DATA_VALID,
+ * @n GMA_STATUS_SLEEP, GMA_STATUS_ADC_ERROR, GMA_STATUS_FLASH_ERROR and GMA_STATUS_FORMULA_MISSING.
+ * @n A register read failure also returns 0, the same value as "no flag set"; use
+ * @n getPowerState() (0xFF on failure) to tell a dead bus apart.
+ * @return Bit mask of GMA_STATUS_xxx values, or 0 when the read fails.
  */
 uint8_t getStatus(void);
 
@@ -220,7 +236,8 @@ uint8_t getStatus(void);
  * @brief Read the remaining seconds in the current warm-up phase.
  * @n Returns the remaining seconds in the current initial or retry phase.
  * @n The firmware exposes 0 at an unstable-window boundary before starting the next 1-minute retry. A completed or idle warm-up also returns 0, so use warmUpTime() to decide whether the whole process is complete.
- * @return Remaining seconds.
+ * @n A register read failure also returns 0.
+ * @return Remaining seconds, or 0 when warm-up is idle/complete or the read fails.
  */
 uint16_t getWarmUpRemainSeconds(void);
 
@@ -228,7 +245,8 @@ uint16_t getWarmUpRemainSeconds(void);
  * @fn getCommandStatus
  * @brief Read the execution status of the latest command.
  * @n 0 idle, 1 busy, 2 done, 0x80 error.
- * @return Command status.
+ * @n A register read failure returns 0x80, the same value as a failed command.
+ * @return Command status, or 0x80 when the read fails.
  */
 uint8_t getCommandStatus(void);
 
@@ -238,8 +256,9 @@ uint8_t getCommandStatus(void);
  * @param gasType Gas channel.
  * @n eGasCO reads AIN0/ADC_CO, eGasNO2 reads AIN1/ADC_NO2, eGasNH3 reads AIN2/ADC_NH3 on GMA3021B.
  * @n Unsupported gas types return 0.
+ * @n A register read failure also returns 0.
  * @n Raw ADC voltage is mainly used for diagnostics. Gas concentration is calculated by the onboard MCU from the Rs/R0 ratio.
- * @return Current voltage in mV.
+ * @return Current voltage in mV, or 0 for an unsupported gas type or read failure.
  */
 uint16_t getADCVoltageMv(eGasType_t gasType);
 
@@ -249,8 +268,9 @@ uint16_t getADCVoltageMv(eGasType_t gasType);
  * @param gasType Gas channel.
  * @n eGasCO reads the AIN0 baseline, eGasNO2 reads the AIN1 baseline, eGasNH3 reads the AIN2 baseline on GMA3021B.
  * @n Unsupported gas types return 0.
+ * @n A register read failure also returns 0.
  * @n Read this value only after hasValidBaseline() returns true. When R0 was absent, a successful warm-up normally creates it, but a Flash failure can leave the baseline invalid.
- * @return Baseline voltage in mV.
+ * @return Baseline voltage in mV, or 0 for an unsupported gas type, missing R0, or read failure.
  */
 uint16_t getBaselineVoltageMv(eGasType_t gasType);
 ```
@@ -269,7 +289,7 @@ Status bits returned by `getStatus()`:
 
 ## Compatibility
 
-| MCU                | Work Well | Work Wrong | Untested | Remarks |
+| Board              | Work Well | Work Wrong | Untested | Remarks |
 | ------------------ |:---------:|:----------:|:--------:| ------- |
 | Arduino uno        |     √     |            |          |         |
 | Mega2560           |     √     |            |          |         |
@@ -282,8 +302,7 @@ Status bits returned by `getStatus()`:
 
 ## History
 
-* Date 2026-07-23
-* Version V1.0.0
+- 2026/11/23 - V1.0.0 version
 
 ## Credits
 

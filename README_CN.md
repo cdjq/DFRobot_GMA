@@ -11,12 +11,13 @@
 | 1 | 0 | `0x77` |
 | 1 | 1 | `0x78` |
 
-## 产品链接（https://www.dfrobot.com.cn）
+## 产品链接 ([https://www.dfrobot.com.cn](https://www.dfrobot.com.cn))
 
 SKU：SEN0757 / SEN0758
 
 ## 目录
 
+* [产品链接](#产品链接-httpswwwdfrobotcomcn)
 * [概述](#概述)
 * [库安装](#库安装)
 * [方法](#方法)
@@ -78,6 +79,10 @@ DFRobot_GMA(TwoWire *pWire = &Wire, uint8_t i2cAddr = GMA_ADDRESS_3);
 /**
  * @fn begin
  * @brief 初始化 I2C 通信并读取设备 ID 和硬件型号。
+ * @n 在 setup() 中调用一次，且位于其它方法之前；本函数会自行启动 I2C 总线，
+ * @n sketch 不需要再调用 Wire.begin()。调用前模块必须已上电，且 ADD_A1 / ADD_A0
+ * @n 拨码与 i2cAddr 一致。
+ * @n 设备 ID 不是 0xA5，或硬件型号不是 GMA_HW_GMA2021B / GMA_HW_GMA3021B 时返回 false。
  * @return 初始化结果。
  * @retval true 检测到 GMA 设备。
  * @retval false 未检测到设备或 I2C 通信失败。
@@ -141,6 +146,8 @@ bool clearBaseline(void);
 /**
  * @fn hasValidBaseline
  * @brief 检查是否存在有效的洁净空气 R0。
+ * @n 每次调用都会读一次状态寄存器，占用一次 I2C 传输。
+ * @n 寄存器读取失败按 false 处理；此时应视为未校准，直到后续调用返回 true 再读 getBaselineVoltageMv()。
  * @return 基线状态。
  * @retval true 存在可用于浓度换算的有效 R0。
  * @retval false 模块尚未校准。
@@ -202,6 +209,8 @@ uint8_t getPowerState(void);
 /**
  * @fn softReset
  * @brief 复位板载 MCU，不清除用户校准数据。
+ * @n 已保存的 R0 保留，但板载预热会从头开始；复位后需重新调用 warmUpTime() 并等到返回 true 再读 ppm。
+ * @n 命令发出后函数会等待 80 ms，让 MCU 完成重启。
  * @return 命令写入结果。
  * @retval true 命令写入成功。
  * @retval false I2C 通信失败。
@@ -211,7 +220,10 @@ bool softReset(void);
 /**
  * @fn getStatus
  * @brief 读取板载 MCU 状态位。
- * @return GMA_STATUS_xxx 位掩码。
+ * @n 状态位依次为 GMA_STATUS_BASELINE_VALID、GMA_STATUS_WARMING、GMA_STATUS_DATA_VALID、
+ * @n GMA_STATUS_SLEEP、GMA_STATUS_ADC_ERROR、GMA_STATUS_FLASH_ERROR 和 GMA_STATUS_FORMULA_MISSING。
+ * @n 寄存器读取失败同样返回 0，与「没有任何状态位」无法区分；可用 getPowerState()（失败返回 0xFF）判断总线是否断开。
+ * @return GMA_STATUS_xxx 位掩码；读取失败返回 0。
  */
 uint8_t getStatus(void);
 
@@ -220,7 +232,8 @@ uint8_t getStatus(void);
  * @brief 读取当前预热阶段的剩余秒数。
  * @n 返回当前首次预热或重试阶段的剩余秒数。
  * @n 稳定窗口检查失败时，固件会在下一轮 1 分钟重试前对外保留一次 0。预热完成或空闲时也返回 0，应使用 warmUpTime() 判断整个流程是否完成。
- * @return 剩余秒数。
+ * @n 寄存器读取失败也返回 0。
+ * @return 剩余秒数；预热空闲、已完成或读取失败时为 0。
  */
 uint16_t getWarmUpRemainSeconds(void);
 
@@ -228,7 +241,8 @@ uint16_t getWarmUpRemainSeconds(void);
  * @fn getCommandStatus
  * @brief 读取最近一次命令执行状态。
  * @n 0 空闲，1 忙，2 完成，0x80 错误。
- * @return 命令状态。
+ * @n 寄存器读取失败返回 0x80，与命令执行失败相同。
+ * @return 命令状态；读取失败返回 0x80。
  */
 uint8_t getCommandStatus(void);
 
@@ -238,8 +252,9 @@ uint8_t getCommandStatus(void);
  * @param gasType 气体通道。
  * @n eGasCO 读取 AIN0/ADC_CO，eGasNO2 读取 AIN1/ADC_NO2，eGasNH3 在 GMA3021B 上读取 AIN2/ADC_NH3。
  * @n 不支持的气体类型返回 0。
+ * @n 寄存器读取失败也返回 0。
  * @n 原始 ADC 电压主要用于诊断。气体浓度由板载 MCU 根据 Rs/R0 比例计算。
- * @return 当前电压，单位 mV。
+ * @return 当前电压，单位 mV；气体类型不支持或读取失败时为 0。
  */
 uint16_t getADCVoltageMv(eGasType_t gasType);
 
@@ -249,8 +264,9 @@ uint16_t getADCVoltageMv(eGasType_t gasType);
  * @param gasType 气体通道。
  * @n eGasCO 读取 AIN0 基准，eGasNO2 读取 AIN1 基准，eGasNH3 在 GMA3021B 上读取 AIN2 基准。
  * @n 不支持的气体类型返回 0。
+ * @n 寄存器读取失败也返回 0。
  * @n 仅应在 hasValidBaseline() 返回 true 后读取；原来没有 R0 时，成功预热通常会生成基线，但 Flash 失败仍可能导致基线无效。
- * @return 基准电压，单位 mV。
+ * @return 基准电压，单位 mV；气体类型不支持、无 R0 或读取失败时为 0。
  */
 uint16_t getBaselineVoltageMv(eGasType_t gasType);
 ```
@@ -269,7 +285,7 @@ uint16_t getBaselineVoltageMv(eGasType_t gasType);
 
 ## 兼容性
 
-| MCU                | 通过 | 未通过 | 未测试 | 备注 |
+| 主板               | 通过 | 未通过 | 未测试 | 备注 |
 | ------------------ |:----:|:----:|:------:| ---- |
 | Arduino uno        |  √   |      |        |      |
 | Mega2560           |  √   |      |        |      |
@@ -282,8 +298,7 @@ uint16_t getBaselineVoltageMv(eGasType_t gasType);
 
 ## 历史
 
-* 日期 2026-07-23
-* 版本 V1.0.0
+- 2026/11/23 - V1.0.0 版本
 
 ## 创作者
 

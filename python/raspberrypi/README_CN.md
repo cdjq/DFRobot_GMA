@@ -11,12 +11,13 @@
 | 1 | 0 | `0x77` |
 | 1 | 1 | `0x78` |
 
-## 产品链接（https://www.dfrobot.com.cn）
+## 产品链接 ([https://www.dfrobot.com.cn](https://www.dfrobot.com.cn))
 
 SKU：SEN0757 / SEN0758
 
 ## 目录
 
+* [产品链接](#产品链接-httpswwwdfrobotcomcn)
 * [概述](#概述)
 * [库安装](#库安装)
 * [方法](#方法)
@@ -89,6 +90,9 @@ def __init__(self, bus=1, i2c_addr=ADDRESS_3):
 def begin(self):
   '''!
     @brief 检查 GMA 传感器是否连接。
+    @n 在其它方法之前调用一次。调用前模块必须已上电，且 ADD_A1 / ADD_A0
+    @n 拨码与 i2c_addr 一致。
+    @n 设备 ID 不是 0xA5，或硬件型号不是 HW_GMA2021B / HW_GMA3021B 时返回 False。
     @return bool 初始化结果。
     @retval True 检测到设备。
     @retval False I2C 通信失败或设备 ID 不匹配。
@@ -146,6 +150,8 @@ def clear_baseline(self):
 def has_valid_baseline(self):
   '''!
     @brief 检查是否存在有效的洁净空气 R0。
+    @n 每次调用都会读一次状态寄存器，占用一次 I2C 传输。
+    @n 寄存器读取失败按 False 处理；此时应视为未校准，直到后续调用返回 True 再读 get_baseline_voltage_mv()。
     @return bool 基线状态。
     @retval True 存在可用于浓度换算的有效 R0。
     @retval False 模块尚未校准。
@@ -193,13 +199,20 @@ def get_power_state(self):
 def soft_reset(self):
   '''!
     @brief 复位板载 MCU，不清除用户校准数据。
+    @n 已保存的 R0 保留，但板载预热会从头开始；复位后需重新调用 warm_up_time() 并等到返回 True 再读 ppm。
+    @n 命令发出后方法会等待 80 ms，让 MCU 完成重启。
     @return bool 命令写入结果。
+    @retval True 命令写入成功。
+    @retval False I2C 通信失败。
   '''
 
 def get_status(self):
   '''!
     @brief 读取板载 MCU 状态位。
-    @return int STATUS_xxx 位掩码。
+    @n 状态位依次为 STATUS_BASELINE_VALID、STATUS_WARMING、STATUS_DATA_VALID、
+    @n STATUS_SLEEP、STATUS_ADC_ERROR、STATUS_FLASH_ERROR 和 STATUS_FORMULA_MISSING。
+    @n 寄存器读取失败同样返回 0，与「没有任何状态位」无法区分；可用 get_power_state()（失败返回 0xFF）判断总线是否断开。
+    @return int STATUS_xxx 位掩码；读取失败返回 0。
   '''
 
 def get_warm_up_remain_seconds(self):
@@ -207,14 +220,16 @@ def get_warm_up_remain_seconds(self):
     @brief 读取当前预热阶段的剩余秒数。
     @n 返回首次预热或重试阶段的剩余秒数。
     @n 稳定窗口检查失败时，固件会在下一轮 1 分钟重试前返回 0。完成和空闲状态也返回 0，应使用 warm_up_time() 区分。
-    @return int 剩余秒数。
+    @n 寄存器读取失败也返回 0。
+    @return int 剩余秒数；预热空闲、已完成或读取失败时为 0。
   '''
 
 def get_command_status(self):
   '''!
     @brief 读取最近一次命令状态。
     @n 0 空闲，1 忙，2 完成，0x80 错误。
-    @return int 命令状态。
+    @n 寄存器读取失败返回 0x80，与命令执行失败相同。
+    @return int 命令状态；读取失败返回 0x80。
   '''
 
 def get_adc_voltage_mv(self, gas_type):
@@ -223,8 +238,9 @@ def get_adc_voltage_mv(self, gas_type):
     @param gas_type int 气体通道。
     @n GAS_CO 读取 AIN0，GAS_NO2 读取 AIN1，GAS_NH3 在 GMA3021B 上读取 AIN2。
     @n 不支持的气体类型返回 0。
+    @n 寄存器读取失败也返回 0。
     @n 原始 ADC 电压主要用于诊断。气体浓度由板载 MCU 根据 Rs/R0 比例计算。
-    @return int ADC 电压，单位 mV。
+    @return int ADC 电压，单位 mV；气体类型不支持或读取失败时为 0。
   '''
 
 def get_baseline_voltage_mv(self, gas_type):
@@ -233,15 +249,16 @@ def get_baseline_voltage_mv(self, gas_type):
     @param gas_type int 气体通道。
     @n GAS_CO 读取 AIN0 基准，GAS_NO2 读取 AIN1 基准，GAS_NH3 在 GMA3021B 上读取 AIN2 基准。
     @n 不支持的气体类型返回 0。
+    @n 寄存器读取失败也返回 0。
     @n 仅应在 has_valid_baseline() 返回 True 后读取；原来没有 R0 时，成功预热通常会生成基线，但 Flash 失败仍可能导致基线无效。
-    @return int 基准电压，单位 mV。
+    @return int 基准电压，单位 mV；气体类型不支持、无 R0 或读取失败时为 0。
   '''
 
 ```
 
 ## 兼容性
 
-| MCU          | 通过 | 未通过 | 未测试 | 备注 |
+| 主板         | 通过 | 未通过 | 未测试 | 备注 |
 | ------------ | :--: | :--: | :----: | ---- |
 | Raspberry Pi |  √   |      |        |      |
 
@@ -254,8 +271,7 @@ def get_baseline_voltage_mv(self, gas_type):
 
 ## 历史
 
-* 日期 2026-07-23
-* 版本 V1.0.0
+- 2026/11/23 - V1.0.0 版本
 
 ## 创作者
 

@@ -11,12 +11,13 @@ This Gravity MEMS gas sensor module (SKU: SEN0757 / SEN0758) runs gas sampling a
 | 1 | 0 | `0x77` |
 | 1 | 1 | `0x78` |
 
-## Product Link (https://www.dfrobot.com)
+## Product Link ([https://www.dfrobot.com](https://www.dfrobot.com))
 
 SKU: SEN0757 / SEN0758
 
 ## Table of Contents
 
+* [Product Link](#product-link-httpswwwdfrobotcom)
 * [Summary](#summary)
 * [Installation](#installation)
 * [Methods](#methods)
@@ -89,6 +90,10 @@ def __init__(self, bus=1, i2c_addr=ADDRESS_3):
 def begin(self):
   '''!
     @brief Check whether the GMA sensor is connected.
+    @n Call it once before any other method. The module must be powered and the
+    @n ADD_A1 / ADD_A0 switches must match i2c_addr.
+    @n Returns False when the device ID is not 0xA5 or the hardware model is neither
+    @n HW_GMA2021B nor HW_GMA3021B.
     @return bool Init result.
     @retval True Device is detected.
     @retval False I2C communication failed or device ID mismatch.
@@ -146,6 +151,9 @@ def clear_baseline(self):
 def has_valid_baseline(self):
   '''!
     @brief Check whether a clean-air R0 baseline is available.
+    @n Reads the status register on every call, so it costs one I2C transaction.
+    @n A register read failure is reported as False; treat that as uncalibrated and do
+    @n not use get_baseline_voltage_mv() until a later call returns True.
     @return bool Baseline state.
     @retval True A valid R0 exists and can be used for concentration conversion.
     @retval False The module is uncalibrated.
@@ -193,13 +201,22 @@ def get_power_state(self):
 def soft_reset(self):
   '''!
     @brief Reset the onboard MCU without clearing user calibration data.
+    @n The saved R0 is kept, but the onboard warm-up starts again from the beginning,
+    @n so call warm_up_time() and wait for True before reading ppm. The method waits
+    @n 80 ms after the command for the MCU to restart.
     @return bool Command write result.
+    @retval True Command write succeeded.
+    @retval False I2C communication failed.
   '''
 
 def get_status(self):
   '''!
     @brief Read onboard MCU status bits.
-    @return int STATUS_xxx bit mask.
+    @n Bits are STATUS_BASELINE_VALID, STATUS_WARMING, STATUS_DATA_VALID,
+    @n STATUS_SLEEP, STATUS_ADC_ERROR, STATUS_FLASH_ERROR and STATUS_FORMULA_MISSING.
+    @n A register read failure also returns 0, the same value as "no flag set"; use
+    @n get_power_state() (0xFF on failure) to tell a dead bus apart.
+    @return int STATUS_xxx bit mask, or 0 when the read fails.
   '''
 
 def get_warm_up_remain_seconds(self):
@@ -207,14 +224,16 @@ def get_warm_up_remain_seconds(self):
     @brief Read the remaining seconds in the current warm-up phase.
     @n Returns the remaining seconds in the initial or retry phase.
     @n The firmware reports 0 at an unstable-window boundary before a 1-minute retry. Complete and idle states also return 0; use warm_up_time() to distinguish completion.
-    @return int Remaining seconds.
+    @n A register read failure also returns 0.
+    @return int Remaining seconds, or 0 when warm-up is idle/complete or the read fails.
   '''
 
 def get_command_status(self):
   '''!
     @brief Read recent command status.
     @n 0 idle, 1 busy, 2 done, 0x80 error.
-    @return int Command status.
+    @n A register read failure returns 0x80, the same value as a failed command.
+    @return int Command status, or 0x80 when the read fails.
   '''
 
 def get_adc_voltage_mv(self, gas_type):
@@ -223,8 +242,9 @@ def get_adc_voltage_mv(self, gas_type):
     @param gas_type int Gas channel.
     @n GAS_CO reads AIN0, GAS_NO2 reads AIN1, GAS_NH3 reads AIN2 on GMA3021B.
     @n Unsupported gas types return 0.
+    @n A register read failure also returns 0.
     @n Raw ADC voltage is mainly used for diagnostics. Gas concentration is calculated by the onboard MCU from the Rs/R0 ratio.
-    @return int ADC voltage in mV.
+    @return int ADC voltage in mV, or 0 for an unsupported gas type or read failure.
   '''
 
 def get_baseline_voltage_mv(self, gas_type):
@@ -233,15 +253,16 @@ def get_baseline_voltage_mv(self, gas_type):
     @param gas_type int Gas channel.
     @n GAS_CO reads AIN0 baseline, GAS_NO2 reads AIN1 baseline, GAS_NH3 reads AIN2 baseline on GMA3021B.
     @n Unsupported gas types return 0.
+    @n A register read failure also returns 0.
     @n Read this value only after has_valid_baseline() returns True. When R0 was absent, a successful warm-up normally creates it, but a Flash failure can leave it invalid.
-    @return int Baseline voltage in mV.
+    @return int Baseline voltage in mV, or 0 for an unsupported gas type, missing R0, or read failure.
   '''
 
 ```
 
 ## Compatibility
 
-| MCU           | Work Well | Work Wrong | Untested | Remarks |
+| Board         | Work Well | Work Wrong | Untested | Remarks |
 | ------------- | :-------: | :--------: | :------: | ------- |
 | Raspberry Pi  |     √     |            |          |         |
 
@@ -254,8 +275,7 @@ def get_baseline_voltage_mv(self, gas_type):
 
 ## History
 
-* Date 2026-07-23
-* Version V1.0.0
+- 2026/11/23 - V1.0.0 version
 
 ## Credits
 

@@ -1,22 +1,22 @@
 '''!
-  @file get_all_gas_data.py
-  @brief Example: warm up the GMA module, then read CO / NO2 / NH3 ppm in one register burst.
-  @n Wiring (I2C, bus=1, address ADDRESS_3 / 0x78):
-  @n VCC → 3.3V or 5V, per the module rating
-  @n GND → GND
-  @n SCL → SCL
-  @n SDA → SDA
-  @details Same role as get_gas_data.py for daily ppm reading; no prior
-  @n     calibrate_baseline.py is required. Difference: get_all_gas_data() once per loop.
-  @n     GMA2021B reports NH3 as not supported.
-  @n     remain 0 s alone is not finished; wait for "Warm-up complete...".
-  @n     Parameter ranges are in the method comments of DFRobot_GMA.py.
-  @copyright   Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
-  @license     The MIT License (MIT)
-  @author      [thdyyl](yuanlong.yu@dfrobot.com)
-  @version  V1.0.0
-  @date  2026-07-23
-  @url https://github.com/DFRobot/DFRobot_GMA
+@file get_all_gas_data.py
+@brief Example: warm up the GMA module, then read CO / NO2 / NH3 ppm in one register burst.
+@n Wiring (I2C, bus=1, address ADDRESS_3 / 0x78):
+@n VCC → 3.3V or 5V, per the module rating
+@n GND → GND
+@n SCL → SCL
+@n SDA → SDA
+@details Same role as get_gas_data.py for daily ppm reading; no prior
+@n     calibrate_baseline.py is required. Difference: get_all_gas_data() once per loop.
+@n     GMA2021B reports NH3 as not supported.
+@n     remain 0 s alone is not finished; wait for "Warm-up complete...".
+@n     Parameter ranges are in the method comments of DFRobot_GMA.py.
+@copyright   Copyright (c) 2026 DFRobot Co.Ltd (http://www.dfrobot.com)
+@license     The MIT License (MIT)
+@author      [thdyyl](yuanlong.yu@dfrobot.com)
+@version  V1.0.0
+@date  2026-11-23
+@url https://github.com/DFRobot/DFRobot_GMA
 '''
 
 import os
@@ -35,6 +35,7 @@ from DFRobot_GMA import DFRobot_GMA
 # 1      1      -> ADDRESS_3 (0x78)
 # Demo default: ADDRESS_3 (ADD_A1=1, ADD_A0=1, 0x78)
 I2C_ADDR = DFRobot_GMA.ADDRESS_3
+# Demo threshold 10 mV (valid 1-50). Firmware default after reset is 50 mV.
 WARM_UP_STABLE_THRESHOLD_MV = 10
 
 
@@ -58,14 +59,12 @@ def print_hardware_model_info(gma):
 
 def configure_warm_up_threshold(gma):
   if gma.set_warm_up_stable_threshold_mv(WARM_UP_STABLE_THRESHOLD_MV):
-    print("Warm-up stable threshold: %d mV" %
-          gma.get_warm_up_stable_threshold_mv())
+    print("Warm-up stable threshold: %d mV" % gma.get_warm_up_stable_threshold_mv())
     return
 
   current_threshold = gma.get_warm_up_stable_threshold_mv()
   if current_threshold > 0:
-    print("Failed to set the warm-up stable threshold. Current threshold: %d mV." %
-          current_threshold)
+    print("Failed to set the warm-up stable threshold. Current threshold: %d mV." % current_threshold)
   else:
     print("Failed to set or read the warm-up stable threshold.")
 
@@ -95,8 +94,7 @@ def wait_for_warm_up(gma, supports_nh3):
   while gma.warm_up_time(3) is False:
     remain_s = gma.get_warm_up_remain_seconds()
     if remain_s > 0:
-      if (last_valid_s is not None and last_valid_s <= 5 and
-          remain_s >= 55):
+      if last_valid_s is not None and last_valid_s <= 5 and remain_s >= 55:
         print("Warm-up incomplete. Restart 1-minute warm-up.")
       last_valid_s = remain_s
     print_raw_voltage_info(gma, supports_nh3)
@@ -138,8 +136,7 @@ def main():
 
   while True:
     co, no2, nh3 = gma.get_all_gas_data()
-    print("CO: %s, NO2: %s, NH3: %s" %
-          (format_gas_ppm(co), format_gas_ppm(no2), format_gas_ppm(nh3)))
+    print("CO: %s, NO2: %s, NH3: %s" % (format_gas_ppm(co), format_gas_ppm(no2), format_gas_ppm(nh3)))
     time.sleep(1)
 
 

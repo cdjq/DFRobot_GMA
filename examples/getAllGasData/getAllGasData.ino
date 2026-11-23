@@ -17,7 +17,7 @@
  * @License     The MIT License (MIT)
  * @author [thdyyl](yuanlong.yu@dfrobot.com)
  * @version  V1.0.0
- * @date  2026-07-23
+ * @date  2026-11-23
  * @url https://github.com/DFRobot/DFRobot_GMA
  */
 
@@ -33,10 +33,11 @@
  * Demo default: GMA_ADDRESS_3 (ADD_A1=1, ADD_A0=1, 0x78)
  */
 const uint8_t GMA_I2C_ADDRESS = GMA_ADDRESS_3;
+/* Demo threshold 10 mV (valid 1–50). Firmware default after reset is 50 mV. */
 const uint8_t GMA_WARMUP_STABLE_THRESHOLD_MV = 10;
 /* Wiring: VCC, GND, SCL, SDA. Default address GMA_ADDRESS_3 (0x78). */
 DFRobot_GMA gma(&Wire, GMA_I2C_ADDRESS);
-bool gmaSupportNH3 = false;
+bool        gmaSupportNH3 = false;
 
 /*
  * Hardware model return value:
@@ -52,7 +53,7 @@ uint8_t printHardwareModelInfo()
   Serial.print(hardwareModel, HEX);
   Serial.print(" (");
 
-  switch(hardwareModel){
+  switch (hardwareModel) {
     case GMA_HW_GMA2021B:
       Serial.println("GMA2021B, CO/NO2)");
       break;
@@ -79,7 +80,7 @@ void printBaselineVoltageInfo()
   Serial.print(gma.getBaselineVoltageMv(gma.eGasNO2));
   Serial.println(" mV");
 
-  if(gmaSupportNH3 == true){
+  if (gmaSupportNH3 == true) {
     Serial.print("NH3 baseline voltage: ");
     Serial.print(gma.getBaselineVoltageMv(gma.eGasNH3));
     Serial.println(" mV");
@@ -94,7 +95,7 @@ void printRawVoltageInfo()
   Serial.print(gma.getADCVoltageMv(gma.eGasNO2));
   Serial.print("mV");
 
-  if(gmaSupportNH3 == true){
+  if (gmaSupportNH3 == true) {
     Serial.print(", NH3=");
     Serial.print(gma.getADCVoltageMv(gma.eGasNH3));
     Serial.print("mV");
@@ -109,11 +110,11 @@ void printRawVoltageInfo()
  */
 void waitForWarmUp()
 {
-  bool isBaseline = gma.hasValidBaseline();
-  uint16_t lastS = 0xFFFF;
-  while(gma.warmUpTime(3) == false){
+  bool     isBaseline = gma.hasValidBaseline();
+  uint16_t lastS      = 0xFFFF;
+  while (gma.warmUpTime(3) == false) {
     uint16_t remainS = gma.getWarmUpRemainSeconds();
-    if((lastS != 0xFFFF) && (remainS > lastS)){
+    if ((lastS != 0xFFFF) && (remainS > lastS)) {
       Serial.println("Warm-up incomplete. Restart 1-minute warm-up.");
     }
     printRawVoltageInfo();
@@ -124,11 +125,11 @@ void waitForWarmUp()
     delay(1000);
   }
 
-  if(isBaseline == true){
+  if (isBaseline == true) {
     Serial.println("Warm-up complete. Output gas data.");
-  }else if(gma.hasValidBaseline() == true){
+  } else if (gma.hasValidBaseline() == true) {
     Serial.println("Warm-up complete. The final stable voltage window has been saved as the clean-air baseline.");
-  }else{
+  } else {
     Serial.println("Warm-up complete, but the clean-air baseline could not be saved.");
   }
 }
@@ -138,11 +139,11 @@ void printGasPpm(const char *gasName, float value)
   Serial.print(gasName);
   Serial.print(": ");
 
-  if(value == GMA_NO_SUPPORT_GAS){
+  if (value == GMA_NO_SUPPORT_GAS) {
     Serial.print("not supported");
-  }else if(value == GMA_VALUE_NOT_READY){
+  } else if (value == GMA_VALUE_NOT_READY) {
     Serial.print("not ready");
-  }else{
+  } else {
     Serial.print(value);
     Serial.print(" ppm");
   }
@@ -151,19 +152,19 @@ void printGasPpm(const char *gasName, float value)
 void setup()
 {
   Serial.begin(115200);
-  while(!Serial){
+  while (!Serial) {
   }
 
-  while(gma.begin() == false){
+  while (gma.begin() == false) {
     Serial.println("GMA sensor not found. Check ADD_A1/ADD_A0 address switches.");
     delay(1000);
   }
 
-  if(gma.setWarmUpStableThresholdMv(GMA_WARMUP_STABLE_THRESHOLD_MV) == true){
+  if (gma.setWarmUpStableThresholdMv(GMA_WARMUP_STABLE_THRESHOLD_MV) == true) {
     Serial.print("Warm-up stable threshold: ");
     Serial.print(gma.getWarmUpStableThresholdMv());
     Serial.println(" mV");
-  }else{
+  } else {
     Serial.println("Failed to set the warm-up stable threshold. Using the firmware default.");
   }
 
@@ -176,16 +177,16 @@ void setup()
 void loop()
 {
   float co, no2, nh3;
-  bool readResult = gma.getAllGasData(co, no2, nh3);
+  bool  readResult = gma.getAllGasData(co, no2, nh3);
 
-  if(readResult == true){
+  if (readResult == true) {
     printGasPpm("CO", co);
     Serial.print(", ");
     printGasPpm("NO2", no2);
     Serial.print(", ");
     printGasPpm("NH3", nh3);
     Serial.println();
-  }else{
+  } else {
     Serial.println("Read failed.");
   }
 
