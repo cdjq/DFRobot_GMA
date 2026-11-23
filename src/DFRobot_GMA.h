@@ -94,7 +94,10 @@ public:
    * @brief Configure and poll the onboard warm-up/stability process.
    * @param minute Initial warm-up time in minutes.
    * @n Values below 1 are treated as 1 minute. Default is GMA_WARMUP_DEFAULT_MINUTE (3).
-   * @n Firmware starts a 3-minute warm-up automatically at power-on. If the host restarts while the sensor stays powered and reports COMPLETE, the first warmUpTime() call starts a new warm-up. A running firmware warm-up is adopted without resetting its countdown.
+   * @n Firmware starts a 3-minute warm-up automatically at power-on. If the host
+   * @n restarts while the sensor stays powered and reports COMPLETE, the first
+   * @n warmUpTime() call starts a new warm-up. A running firmware warm-up is
+   * @n adopted without resetting its countdown.
    * @n An existing R0 is preserved; when R0 is absent, the final stable window is saved automatically as the new clean-air baseline.
    * @n When no R0 exists, run this process only in verified clean air. The firmware cannot identify whether the surrounding air is actually clean.
    * @return Warm-up state.
@@ -225,7 +228,9 @@ public:
    * @fn getWarmUpRemainSeconds
    * @brief Read the remaining seconds in the current warm-up phase.
    * @n Returns the remaining seconds in the current initial or retry phase.
-   * @n The firmware exposes 0 at an unstable-window boundary before starting the next 1-minute retry. A completed or idle warm-up also returns 0, so use warmUpTime() to decide whether the whole process is complete.
+   * @n The firmware exposes 0 at an unstable-window boundary before starting the
+   * @n next 1-minute retry. A completed or idle warm-up also returns 0, so use
+   * @n warmUpTime() to decide whether the whole process is complete.
    * @n A register read failure also returns 0.
    * @return Remaining seconds, or 0 when warm-up is idle, complete or the read fails.
    */

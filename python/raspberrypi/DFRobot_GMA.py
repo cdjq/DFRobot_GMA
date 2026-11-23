@@ -153,7 +153,10 @@ class DFRobot_GMA:
     @brief Configure and poll the automatic warm-up/stability process.
     @param minute int Initial warm-up duration in minutes.
     @n Values below 1 are treated as 1. Default is 3 minutes.
-    @n Firmware starts a 3-minute warm-up automatically at power-on. If the host restarts while the sensor stays powered and reports COMPLETE, the first warm_up_time() call starts a new warm-up. A running firmware warm-up is adopted without resetting its countdown.
+    @n Firmware starts a 3-minute warm-up automatically at power-on. If the host
+    @n restarts while the sensor stays powered and reports COMPLETE, the first
+    @n warm_up_time() call starts a new warm-up. A running firmware warm-up is
+    @n adopted without resetting its countdown.
     @n Existing R0 is preserved; when R0 is absent, the final stable window is saved automatically.
     @n When R0 is absent, use this method only in verified clean air. Stability does not prove that the air is clean.
     @return bool Warm-up state.
