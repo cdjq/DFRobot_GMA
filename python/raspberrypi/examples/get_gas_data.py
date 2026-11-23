@@ -35,9 +35,9 @@ from DFRobot_GMA import DFRobot_GMA
 # 1      0      -> ADDRESS_2 (0x77)
 # 1      1      -> ADDRESS_3 (0x78)
 # Demo default: ADDRESS_3 (ADD_A1=1, ADD_A0=1, 0x78)
-I2C_ADDR = DFRobot_GMA.ADDRESS_3
+i2c_addr = DFRobot_GMA.ADDRESS_3
 # Demo threshold 10 mV (valid 1-50). Firmware default after reset is 50 mV.
-WARM_UP_STABLE_THRESHOLD_MV = 10
+warm_up_stable_threshold_mv = 10
 
 
 # Hardware model return value:
@@ -59,7 +59,7 @@ def print_hardware_model_info(gma):
 
 
 def configure_warm_up_threshold(gma):
-  if gma.set_warm_up_stable_threshold_mv(WARM_UP_STABLE_THRESHOLD_MV):
+  if gma.set_warm_up_stable_threshold_mv(warm_up_stable_threshold_mv):
     print("Warm-up stable threshold: %d mV" % gma.get_warm_up_stable_threshold_mv())
     return
 
@@ -121,7 +121,7 @@ def format_gas_ppm(value):
 
 
 def main():
-  gma = DFRobot_GMA(bus=1, i2c_addr=I2C_ADDR)
+  gma = DFRobot_GMA(bus=1, i2c_addr=i2c_addr)
 
   while gma.begin() is False:
     print("GMA sensor not found. Check ADD_A1/ADD_A0 address switches.")
@@ -136,7 +136,7 @@ def main():
   print_baseline_voltage_info(gma, supports_nh3)
 
   while True:
-    co = gma.get_gas_data(DFRobot_GMA.GAS_CO)
+    co = gma.get_gas_data(DFRobot_GMA.GAS_CO)  # pylint: disable=invalid-name
     no2 = gma.get_gas_data(DFRobot_GMA.GAS_NO2)
     nh3 = gma.get_gas_data(DFRobot_GMA.GAS_NH3)
     print("CO: %s, NO2: %s, NH3: %s" % (format_gas_ppm(co), format_gas_ppm(no2), format_gas_ppm(nh3)))

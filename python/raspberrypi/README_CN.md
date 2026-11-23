@@ -59,7 +59,7 @@ cd python/raspberrypi/examples
 python get_gas_data.py
 ```
 
-示例在预热前会设置并回读 10mV 稳定阈值。调试时可修改 `WARM_UP_STABLE_THRESHOLD_MV`，有效范围为 1～50mV。驱动会对失败或长度不完整的 I2C 传输最多重试三次。主控复位但传感器仍保持供电、并暴露旧的 `COMPLETE` 状态时，驱动会请求新一轮预热，不会把该旧快照当成本轮结果。
+示例在预热前会设置并回读 10mV 稳定阈值。调试时可修改 `warm_up_stable_threshold_mv`，有效范围为 1～50mV。驱动会对失败或长度不完整的 I2C 传输最多重试三次。主控复位但传感器仍保持供电、并暴露旧的 `COMPLETE` 状态时，驱动会请求新一轮预热，不会把该旧快照当成本轮结果。
 
 ## 方法
 

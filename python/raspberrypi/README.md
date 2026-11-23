@@ -59,7 +59,7 @@ cd python/raspberrypi/examples
 python get_gas_data.py
 ```
 
-Examples set and read back a 10mV stability threshold before warm-up. Change `WARM_UP_STABLE_THRESHOLD_MV` for debugging; the valid range is 1–50mV. The driver retries a failed or incomplete I2C transfer up to three times. If the host restarts while the powered sensor still exposes an old `COMPLETE` state, a fresh warm-up is requested and that old snapshot is not accepted as the result of the new request.
+Examples set and read back a 10mV stability threshold before warm-up. Change `warm_up_stable_threshold_mv` for debugging; the valid range is 1–50mV. The driver retries a failed or incomplete I2C transfer up to three times. If the host restarts while the powered sensor still exposes an old `COMPLETE` state, a fresh warm-up is requested and that old snapshot is not accepted as the result of the new request.
 
 ## Methods
 

@@ -303,7 +303,7 @@ class DFRobot_GMA:
     if data is None:
       return (self.VALUE_NOT_READY, self.VALUE_NOT_READY, self.VALUE_NOT_READY)
 
-    co = self._bytes_to_float(data[0:4])
+    co = self._bytes_to_float(data[0:4])  # pylint: disable=invalid-name
     no2 = self._bytes_to_float(data[4:8])
 
     if self._hw_model == 0:
