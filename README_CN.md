@@ -108,7 +108,7 @@ uint8_t getHardwareModel(void);
  * @n 已有 R0 时保留原值，没有 R0 时自动保存最后稳定窗口为新的洁净空气基线。
  * @n 没有 R0 时，必须仅在确认的洁净空气中执行本流程。固件无法判断周围空气是否洁净。
  * @return 预热状态。
- * @retval true 预热和稳定性检查已完成；原来没有 R0 时，最后稳定窗口已用于生成 R0。
+ * @retval true 预热和稳定性检查已完成；原来没有 R0 时，固件已尝试将最后稳定窗口保存为 R0。
  * @retval false 正在预热，或命令写入失败。
  */
 bool warmUpTime(uint8_t minute = GMA_WARMUP_DEFAULT_MINUTE);
@@ -285,7 +285,7 @@ uint16_t getBaselineVoltageMv(eGasType_t gasType);
 
 ## 兼容性
 
-| 主板               | 通过 | 未通过 | 未测试 | 备注 |
+| 主控               | 通过 | 未通过 | 未测试 | 备注 |
 | ------------------ |:----:|:----:|:------:| ---- |
 | Arduino uno        |  √   |      |        |      |
 | Mega2560           |  √   |      |        |      |

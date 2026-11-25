@@ -112,7 +112,7 @@ uint8_t getHardwareModel(void);
  * @n An existing R0 is preserved; when R0 is absent, the final stable window is saved automatically as the new clean-air baseline.
  * @n When no R0 exists, run this process only in verified clean air. The firmware cannot identify whether the surrounding air is actually clean.
  * @return Warm-up state.
- * @retval true Warm-up and stability checking are complete. If R0 was absent, the final stable window has been used to create it.
+ * @retval true Warm-up and stability checking are complete. If no R0 existed, the firmware has attempted to save the final stable window as R0.
  * @retval false Warm-up is still running or the command write failed.
  */
 bool warmUpTime(uint8_t minute = GMA_WARMUP_DEFAULT_MINUTE);
@@ -139,11 +139,11 @@ uint8_t getWarmUpStableThresholdMv(void);
 
 /**
  * @fn clearBaseline
- * @brief Clear the saved R0 and enter the uncalibrated state.
- * @n This function only clears R0. Call warmUpTime() in verified clean air afterward; because no baseline exists, its final stable window is saved automatically as the new R0.
+ * @brief Clear the saved clean-air baseline and enter the uncalibrated state.
+ * @n This function only clears R0. Call warmUpTime() in verified clean air afterward; because no baseline exists, warmUpTime() will save its final stable window as the new R0.
  * @return Clear result.
  * @retval true The Flash record and active R0 were cleared.
- * @retval false The I2C command or Flash erase failed.
+ * @retval false The command or Flash erase failed.
  */
 bool clearBaseline(void);
 
@@ -187,7 +187,8 @@ bool getAllGasData(float &co, float &no2, float &nh3);
 /**
  * @fn sleepMode
  * @brief Stop onboard MCU gas sampling (sleep).
- * @n On SEN0757/SEN0758 the heater and LDO stay powered, so overall module current does not drop much. Sleep only pauses MCU acquisition, not a system low-power cut.
+ * @n On SEN0757/SEN0758 the heater and LDO stay powered, so overall module current
+ * @n does not drop much. Sleep only pauses MCU acquisition, not a system low-power cut.
  * @n This function waits briefly for the power-state register to update.
  */
 void sleepMode(void);
@@ -242,7 +243,7 @@ uint8_t getStatus(void);
  * @n next 1-minute retry. A completed or idle warm-up also returns 0, so use
  * @n warmUpTime() to decide whether the whole process is complete.
  * @n A register read failure also returns 0.
- * @return Remaining seconds, or 0 when warm-up is idle/complete or the read fails.
+ * @return Remaining seconds, or 0 when warm-up is idle, complete or the read fails.
  */
 uint16_t getWarmUpRemainSeconds(void);
 
@@ -263,7 +264,7 @@ uint8_t getCommandStatus(void);
  * @n Unsupported gas types return 0.
  * @n A register read failure also returns 0.
  * @n Raw ADC voltage is mainly used for diagnostics. Gas concentration is calculated by the onboard MCU from the Rs/R0 ratio.
- * @return Current voltage in mV, or 0 for an unsupported gas type or read failure.
+ * @return Current voltage in mV, or 0 when the gas type is unsupported or the read fails.
  */
 uint16_t getADCVoltageMv(eGasType_t gasType);
 
@@ -275,7 +276,7 @@ uint16_t getADCVoltageMv(eGasType_t gasType);
  * @n Unsupported gas types return 0.
  * @n A register read failure also returns 0.
  * @n Read this value only after hasValidBaseline() returns true. When R0 was absent, a successful warm-up normally creates it, but a Flash failure can leave the baseline invalid.
- * @return Baseline voltage in mV, or 0 for an unsupported gas type, missing R0, or read failure.
+ * @return Baseline voltage in mV, or 0 when the gas type is unsupported, R0 is absent or the read fails.
  */
 uint16_t getBaselineVoltageMv(eGasType_t gasType);
 ```
@@ -294,7 +295,7 @@ Status bits returned by `getStatus()`:
 
 ## Compatibility
 
-| Board              | Work Well | Work Wrong | Untested | Remarks |
+| MCU                | Work Well | Work Wrong | Untested | Remarks |
 | ------------------ |:---------:|:----------:|:--------:| ------- |
 | Arduino uno        |     √     |            |          |         |
 | Mega2560           |     √     |            |          |         |

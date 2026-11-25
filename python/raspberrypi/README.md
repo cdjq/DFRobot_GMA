@@ -110,7 +110,7 @@ def get_hardware_model(self):
 
 def warm_up_time(self, minute=3):
   '''!
-    @brief Configure and poll the onboard warm-up/stability process.
+    @brief Configure and poll the automatic warm-up/stability process.
     @param minute int Initial warm-up duration in minutes.
     @n Values below 1 are treated as 1. Default is 3 minutes.
     @n Firmware starts a 3-minute warm-up automatically at power-on. If the host
@@ -120,7 +120,7 @@ def warm_up_time(self, minute=3):
     @n Existing R0 is preserved; when R0 is absent, the final stable window is saved automatically.
     @n When R0 is absent, use this method only in verified clean air. Stability does not prove that the air is clean.
     @return bool Warm-up state.
-    @retval True Warm-up and stability checking are complete; if R0 was absent, the final stable window has been used to create it.
+    @retval True Warm-up and stability checking are complete; if R0 was absent, the firmware has attempted to save the final stable window as R0.
     @retval False Warm-up is running or the I2C command failed.
   '''
 
@@ -145,7 +145,7 @@ def get_warm_up_stable_threshold_mv(self):
 def clear_baseline(self):
   '''!
     @brief Clear the saved R0 and enter the uncalibrated state.
-    @n This method only clears R0. Run warm_up_time() in verified clean air afterward; because no baseline exists, its final stable window is saved automatically as the new R0.
+    @n This method only clears R0. Run warm_up_time() in verified clean air afterward; because no baseline exists, its final stable window will be saved automatically as the new R0.
     @return bool Clear result.
     @retval True The Flash record and active R0 were cleared.
     @retval False The I2C command or Flash erase failed.
@@ -183,7 +183,8 @@ def get_all_gas_data(self):
 def sleep_mode(self):
   '''!
     @brief Stop onboard MCU gas sampling (sleep).
-    @n On SEN0757/SEN0758 the heater and LDO stay powered, so overall module current does not drop much. Sleep only pauses MCU acquisition, not a system low-power cut.
+    @n On SEN0757/SEN0758 the heater and LDO stay powered, so overall module current
+    @n does not drop much. Sleep only pauses MCU acquisition, not a system low-power cut.
     @n This function waits briefly for the power-state register to update.
   '''
 
@@ -265,7 +266,7 @@ def get_baseline_voltage_mv(self, gas_type):
 
 ## Compatibility
 
-| Board         | Work Well | Work Wrong | Untested | Remarks |
+| MCU           | Work Well | Work Wrong | Untested | Remarks |
 | ------------- | :-------: | :--------: | :------: | ------- |
 | Raspberry Pi  |     √     |            |          |         |
 

@@ -131,7 +131,7 @@ public:
    * @brief Clear the saved clean-air baseline and enter the uncalibrated state.
    * @n This function only clears R0. Call warmUpTime() in verified clean air afterward; because no baseline exists, warmUpTime() will save its final stable window as the new R0.
    * @return Clear result.
-   * @retval true The baseline was cleared.
+   * @retval true The Flash record and active R0 were cleared.
    * @retval false The command or Flash erase failed.
    */
   bool clearBaseline(void);
@@ -252,6 +252,7 @@ public:
    * @n eGasCO reads AIN0/ADC_CO, eGasNO2 reads AIN1/ADC_NO2, eGasNH3 reads AIN2/ADC_NH3 on GMA3021B.
    * @n Unsupported gas types return 0.
    * @n A register read failure also returns 0.
+   * @n Raw ADC voltage is mainly used for diagnostics. Gas concentration is calculated by the onboard MCU from the Rs/R0 ratio.
    * @return Current voltage in mV, or 0 when the gas type is unsupported or the read fails.
    */
   uint16_t getADCVoltageMv(eGasType_t gasType);
